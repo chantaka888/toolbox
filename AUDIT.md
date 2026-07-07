@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-07-07 — 担当者カラーによるカード着色機能を追加
+
+- `kanban-board/index.html`: `memberColors` フィールドをデータ構造に追加
+- `kanban-board/index.html`: `hexToRgba()` ヘルパー関数を追加
+- `kanban-board/index.html`: 設定モーダルのメンバー行にカラーピッカーを追加
+- `kanban-board/index.html`: `renderCard()` でカード背景（15%透過）とボーダーに担当者色を適用（期限超過・間近は優先）
+- `kanban-board/index.html`: メンバー名変更・削除時に `memberColors` も連動更新
+
 ## 2026-07-07 14:50 — かんばんボードにOpenProject風の機能を追加
 
 - `kanban-board/index.html`: カードに開始日フィールドを追加
