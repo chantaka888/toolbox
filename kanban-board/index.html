@@ -56,6 +56,21 @@
   .iconBtn.accentBtn{background:var(--accent);color:#fff;border-color:var(--accent);}
   .iconBtn.accentBtn:hover{filter:brightness(1.05);}
 
+  /* ---------- フェーズバー ---------- */
+  #phaseBar{
+    background:var(--panel);border-bottom:1px solid var(--border);
+    padding:8px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;
+  }
+  .phaseBarLabel{color:var(--muted);white-space:nowrap;}
+  #phaseTabs{display:flex;gap:6px;flex-wrap:wrap;}
+  .phaseTab{
+    border:1px solid var(--border);background:#fff;border-radius:16px;padding:5px 12px;font-size:12.5px;color:var(--text);
+  }
+  .phaseTab:hover{background:#f7f8fa;}
+  .phaseTab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .phaseTab.archived{opacity:.6;}
+  .archToggle{display:flex;align-items:center;gap:4px;color:var(--muted);white-space:nowrap;}
+
   /* ---------- アラートバナー ---------- */
   #alertBanner{
     display:none;margin:12px 20px 0;padding:10px 16px;border-radius:8px;font-size:13px;
@@ -110,6 +125,7 @@
   .card .badge.due{background:#f1f3f5;color:var(--muted);}
   .card .badge.due.overdue{background:var(--danger-soft);color:var(--danger);}
   .card .badge.due.soon{background:var(--warn-soft);color:#8a5300;}
+  .card .badge.phase{background:#f3e8ff;color:#8033c9;}
   .card .cProgress{margin-top:6px;font-size:11px;color:var(--muted);}
 
   /* ---------- モーダル ---------- */
@@ -146,6 +162,17 @@
   .comments .cItem .cMetaLine button{background:none;border:none;color:var(--muted);font-size:11px;}
   .comments .cItem .cMetaLine button:hover{color:var(--danger);}
   .comments .cList{display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;}
+
+  .related ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;}
+  .related li{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .related .relTitle{flex:1;color:var(--accent);cursor:pointer;}
+  .related .relTitle:hover{text-decoration:underline;}
+  .related .unlinkBtn{background:none;border:none;color:var(--muted);font-size:13px;}
+  .related .unlinkBtn:hover{color:var(--danger);}
+
+  .historyField summary{cursor:pointer;font-size:12px;color:var(--muted);font-weight:600;}
+  .historyField ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;}
+  .historyField li{font-size:12px;color:var(--muted);}
 
   .mFoot{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-top:1px solid var(--border);}
   .deleteCardBtn{background:none;border:1px solid var(--danger);color:var(--danger);border-radius:7px;padding:7px 12px;font-size:12px;}
@@ -194,6 +221,14 @@
   <button class="iconBtn accentBtn" id="notifyBtn">🔔 通知を有効化</button>
 </header>
 
+<div id="phaseBar">
+  <span class="phaseBarLabel">フェーズ:</span>
+  <div id="phaseTabs"></div>
+  <button class="iconBtn" id="addPhaseBtn">＋ 新しいフェーズ</button>
+  <button class="iconBtn" id="setCurrentPhaseBtn" style="display:none;">🎯 これを既定のフェーズにする</button>
+  <label class="archToggle"><input type="checkbox" id="showArchivedPhasesToggle"> アーカイブ済みも表示</label>
+</div>
+
 <div id="alertBanner"></div>
 
 <main>
@@ -220,6 +255,16 @@
           <select id="cardAssigneeInput"></select>
         </div>
         <div class="field">
+          <label>フェーズ</label>
+          <select id="cardPhaseInput"></select>
+        </div>
+      </div>
+      <div class="fieldRow">
+        <div class="field">
+          <label>開始日</label>
+          <input type="date" id="cardStartInput">
+        </div>
+        <div class="field">
           <label>期限</label>
           <input type="date" id="cardDueInput">
         </div>
@@ -232,6 +277,14 @@
           <button id="checklistAddBtn">追加</button>
         </div>
       </div>
+      <div class="field related">
+        <label>関連タスク</label>
+        <ul id="relatedList"></ul>
+        <div class="addRow">
+          <select id="relatedAddSelect"><option value="">カードを選択...</option></select>
+          <button id="relatedAddBtn">追加</button>
+        </div>
+      </div>
       <div class="field comments">
         <label>コメント</label>
         <div class="cList" id="commentList"></div>
@@ -240,6 +293,10 @@
           <button id="commentAddBtn">送信</button>
         </div>
       </div>
+      <details class="field historyField">
+        <summary>変更履歴 (<span id="historyCount">0</span>件)</summary>
+        <ul id="historyList"></ul>
+      </details>
     </div>
     <div class="mFoot">
       <button class="deleteCardBtn" id="cardDeleteBtn">このカードを削除</button>
@@ -263,6 +320,10 @@
           <input type="text" id="memberNewInput" placeholder="メンバー名を追加してEnter">
           <button id="memberAddBtn">追加</button>
         </div>
+      </div>
+      <div class="field">
+        <label>フェーズ一覧(既定フェーズは📌で表示・アーカイブすると絞り込みタブから隠れます)</label>
+        <div class="settingsList" id="phaseList"></div>
       </div>
       <div class="field">
         <label>期限アラートの基準日数</label>
@@ -295,8 +356,9 @@
   }
 
   function defaultData(){
+    const phase1 = {id: uid(), name: "フェーズ1", archived:false, createdAt: Date.now()};
     return {
-      version: 1,
+      version: 2,
       passwordHash: null,
       alertDays: 2,
       members: ["局長","部下A","部下B"],
@@ -306,23 +368,43 @@
         {id: uid(), name: "進行中"},
         {id: uid(), name: "完了"}
       ],
+      phases: [phase1],
+      currentPhaseId: phase1.id,
+      boardPhaseFilter: phase1.id,
       cards: []
     };
   }
 
   let data = load();
 
+  function normalizeData(parsed){
+    // 最低限のフィールド補完(旧バージョンのデータ・外部からのインポートにも対応)
+    const d = Object.assign(defaultData(), parsed);
+    if(!Array.isArray(d.columns) || d.columns.length===0) d.columns = defaultData().columns;
+    if(!Array.isArray(d.cards)) d.cards = [];
+    if(!Array.isArray(d.members) || d.members.length===0) d.members = defaultData().members;
+    if(!Array.isArray(d.phases) || d.phases.length===0){
+      const p = {id: uid(), name: "フェーズ1", archived:false, createdAt: Date.now()};
+      d.phases = [p];
+      d.currentPhaseId = p.id;
+      d.boardPhaseFilter = p.id;
+    }
+    if(!d.currentPhaseId || !d.phases.find(p=>p.id===d.currentPhaseId)) d.currentPhaseId = d.phases[0].id;
+    if(!d.boardPhaseFilter || (d.boardPhaseFilter!=="all" && !d.phases.find(p=>p.id===d.boardPhaseFilter))) d.boardPhaseFilter = d.currentPhaseId;
+    d.cards.forEach(c=>{
+      if(typeof c.phaseId !== "string" || (c.phaseId && !d.phases.find(p=>p.id===c.phaseId))) c.phaseId = d.currentPhaseId;
+      if(typeof c.startDate !== "string") c.startDate = "";
+      if(!Array.isArray(c.history)) c.history = [];
+      if(!Array.isArray(c.relatedIds)) c.relatedIds = [];
+    });
+    return d;
+  }
+
   function load(){
     try{
       const raw = localStorage.getItem(STORAGE_KEY);
       if(!raw) return defaultData();
-      const parsed = JSON.parse(raw);
-      // 最低限のフィールド補完
-      const d = Object.assign(defaultData(), parsed);
-      if(!Array.isArray(d.columns) || d.columns.length===0) d.columns = defaultData().columns;
-      if(!Array.isArray(d.cards)) d.cards = [];
-      if(!Array.isArray(d.members) || d.members.length===0) d.members = defaultData().members;
-      return d;
+      return normalizeData(JSON.parse(raw));
     }catch(e){
       console.error("データ読み込みエラー", e);
       return defaultData();
@@ -408,6 +490,16 @@
     return null;
   }
 
+  function phaseName(phaseId){
+    const p = data.phases.find(p=>p.id===phaseId);
+    return p ? p.name : "";
+  }
+
+  function logHistory(card, message){
+    card.history = card.history || [];
+    card.history.push({id: uid(), ts: Date.now(), user: data.currentUser, message});
+  }
+
   // ---------------- 描画: ヘッダー・フィルタ ----------------
   const currentUserSelect = document.getElementById("currentUserSelect");
   let assigneeFilter = null;
@@ -422,9 +514,62 @@
     save();
   });
 
+  document.getElementById("filterClearBtn").addEventListener("click", ()=>{
+    assigneeFilter = null;
+    document.getElementById("filterClearBtn").style.display = "none";
+    renderBoard();
+  });
+
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
+
+  // ---------------- フェーズバー ----------------
+  let showArchivedPhases = false;
+
+  function renderPhaseTabs(){
+    const tabsEl = document.getElementById("phaseTabs");
+    const phasesToShow = data.phases.filter(p=> showArchivedPhases || !p.archived);
+    let html = `<button class="phaseTab ${data.boardPhaseFilter==="all"?"active":""}" data-phase="all">すべて</button>`;
+    html += phasesToShow.map(p=>
+      `<button class="phaseTab ${data.boardPhaseFilter===p.id?"active":""} ${p.archived?"archived":""}" data-phase="${p.id}">${p.id===data.currentPhaseId?"📌 ":""}${escapeHtml(p.name)}${p.archived?" 🗄":""}</button>`
+    ).join("");
+    tabsEl.innerHTML = html;
+    tabsEl.querySelectorAll(".phaseTab").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        data.boardPhaseFilter = btn.dataset.phase;
+        save();
+        renderPhaseTabs();
+        renderBoard();
+      });
+    });
+
+    const setCurBtn = document.getElementById("setCurrentPhaseBtn");
+    setCurBtn.style.display = (data.boardPhaseFilter!=="all" && data.boardPhaseFilter!==data.currentPhaseId) ? "inline-flex" : "none";
+  }
+
+  document.getElementById("showArchivedPhasesToggle").addEventListener("change", e=>{
+    showArchivedPhases = e.target.checked;
+    renderPhaseTabs();
+  });
+
+  document.getElementById("addPhaseBtn").addEventListener("click", ()=>{
+    const name = prompt("新しいフェーズの名前", `フェーズ${data.phases.length+1}`);
+    if(!name) return;
+    const p = {id: uid(), name, archived:false, createdAt: Date.now()};
+    data.phases.push(p);
+    data.currentPhaseId = p.id;
+    data.boardPhaseFilter = p.id;
+    save();
+    renderPhaseTabs();
+    renderBoard();
+  });
+
+  document.getElementById("setCurrentPhaseBtn").addEventListener("click", ()=>{
+    data.currentPhaseId = data.boardPhaseFilter;
+    save();
+    renderPhaseTabs();
+  });
 
   // ---------------- アラートバナー ----------------
   function renderAlertBanner(){
@@ -473,14 +618,24 @@
   // ---------------- ボード描画 ----------------
   const boardEl = document.getElementById("board");
 
+  function visibleCards(colId){
+    return data.cards.filter(c=>{
+      if(c.columnId!==colId) return false;
+      if(assigneeFilter && c.assignee!==assigneeFilter) return false;
+      if(data.boardPhaseFilter!=="all" && c.phaseId!==data.boardPhaseFilter) return false;
+      return true;
+    });
+  }
+
   function renderBoard(){
+    renderPhaseTabs();
     boardEl.innerHTML = "";
     data.columns.forEach(col=>{
       const colEl = document.createElement("div");
       colEl.className = "column";
       colEl.dataset.colId = col.id;
 
-      const cardsInCol = data.cards.filter(c=>c.columnId===col.id && (!assigneeFilter || c.assignee===assigneeFilter));
+      const cardsInCol = visibleCards(col.id);
 
       colEl.innerHTML = `
         <div class="columnHead">
@@ -535,8 +690,12 @@
       btn.addEventListener("click", ()=>{
         const card = {
           id: uid(), columnId: btn.dataset.colId, title: "新しいカード", desc: "",
-          assignee: data.currentUser, dueDate: "", checklist: [], comments: [], createdAt: Date.now()
+          assignee: data.currentUser,
+          phaseId: (data.boardPhaseFilter!=="all") ? data.boardPhaseFilter : (data.currentPhaseId||""),
+          startDate: "", dueDate: "", checklist: [], comments: [], relatedIds: [], history: [],
+          createdAt: Date.now()
         };
+        logHistory(card, "カードを作成");
         data.cards.push(card);
         save();
         renderBoard();
@@ -559,16 +718,26 @@
     const doneCount = card.checklist.filter(i=>i.done).length;
     const progressHtml = card.checklist.length>0
       ? `<div class="cProgress">☑ ${doneCount}/${card.checklist.length}</div>` : "";
+    const phase = data.phases.find(p=>p.id===card.phaseId);
 
     el.innerHTML = `
       <div class="cTitle">${escapeHtml(card.title)}</div>
       <div class="cMeta">
-        ${card.assignee ? `<span class="badge assignee">${escapeHtml(card.assignee)}</span>` : ""}
+        ${phase ? `<span class="badge phase">${escapeHtml(phase.name)}</span>` : ""}
+        ${card.assignee ? `<span class="badge assignee" data-assignee="${escapeHtml(card.assignee)}">${escapeHtml(card.assignee)}</span>` : ""}
         ${card.dueDate ? `<span class="badge due ${status||""}">${escapeHtml(card.dueDate)}</span>` : ""}
         ${card.comments.length>0 ? `<span class="badge">💬 ${card.comments.length}</span>` : ""}
+        ${(card.relatedIds||[]).length>0 ? `<span class="badge">🔗 ${card.relatedIds.length}</span>` : ""}
       </div>
       ${progressHtml}
     `;
+
+    el.querySelector(".badge.assignee")?.addEventListener("click", e=>{
+      e.stopPropagation();
+      assigneeFilter = card.assignee;
+      document.getElementById("filterClearBtn").style.display = "inline-flex";
+      renderBoard();
+    });
 
     el.addEventListener("click", ()=> openCardModal(card.id));
 
@@ -601,6 +770,11 @@
       const cardId = e.dataTransfer.getData("text/plain");
       const card = data.cards.find(c=>c.id===cardId);
       if(card){
+        if(card.columnId !== colId){
+          const oldName = (data.columns.find(c=>c.id===card.columnId)||{}).name || "?";
+          const newName = (data.columns.find(c=>c.id===colId)||{}).name || "?";
+          logHistory(card, `ステータスを「${oldName}」→「${newName}」に変更`);
+        }
         card.columnId = colId;
         // 並び順をDOM順に反映
         const order = Array.from(listEl.querySelectorAll(".card")).map(el=>el.dataset.cardId);
@@ -631,11 +805,17 @@
   const cardTitleInput = document.getElementById("cardTitleInput");
   const cardDescInput = document.getElementById("cardDescInput");
   const cardAssigneeInput = document.getElementById("cardAssigneeInput");
+  const cardPhaseInput = document.getElementById("cardPhaseInput");
+  const cardStartInput = document.getElementById("cardStartInput");
   const cardDueInput = document.getElementById("cardDueInput");
   const checklistItemsEl = document.getElementById("checklistItems");
   const checklistNewInput = document.getElementById("checklistNewInput");
   const commentListEl = document.getElementById("commentList");
   const commentNewInput = document.getElementById("commentNewInput");
+  const relatedListEl = document.getElementById("relatedList");
+  const relatedAddSelect = document.getElementById("relatedAddSelect");
+  const historyListEl = document.getElementById("historyList");
+  const historyCountEl = document.getElementById("historyCount");
 
   let openCardId = null;
 
@@ -649,10 +829,16 @@
     cardAssigneeInput.innerHTML = `<option value="">(未設定)</option>` + data.members.map(m=>
       `<option value="${escapeHtml(m)}" ${m===card.assignee?"selected":""}>${escapeHtml(m)}</option>`
     ).join("");
+    cardPhaseInput.innerHTML = `<option value="">(未設定)</option>` + data.phases.map(p=>
+      `<option value="${p.id}" ${p.id===card.phaseId?"selected":""}>${escapeHtml(p.name)}${p.archived?"（アーカイブ済み）":""}</option>`
+    ).join("");
+    cardStartInput.value = card.startDate || "";
     cardDueInput.value = card.dueDate || "";
 
     renderChecklist(card);
     renderComments(card);
+    renderRelated(card);
+    renderHistory(card);
 
     cardModalOverlay.classList.add("show");
   }
@@ -709,25 +895,127 @@
     });
   }
 
+  function renderRelated(card){
+    relatedListEl.innerHTML = "";
+    (card.relatedIds||[]).forEach(rid=>{
+      const rc = data.cards.find(c=>c.id===rid);
+      const li = document.createElement("li");
+      const label = rc ? escapeHtml(rc.title) : "(削除済みのカード)";
+      li.innerHTML = `<span class="relTitle">${label}</span><button class="unlinkBtn" title="解除">✕</button>`;
+      if(rc){
+        li.querySelector(".relTitle").addEventListener("click", ()=> openCardModal(rc.id));
+      }
+      li.querySelector(".unlinkBtn").addEventListener("click", ()=> unlinkRelated(card, rid));
+      relatedListEl.appendChild(li);
+    });
+
+    relatedAddSelect.innerHTML = `<option value="">カードを選択...</option>` + data.cards
+      .filter(c=>c.id!==card.id && !(card.relatedIds||[]).includes(c.id))
+      .map(c=>`<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
+  }
+
+  function linkRelated(card, otherId){
+    const other = data.cards.find(c=>c.id===otherId);
+    if(!other) return;
+    card.relatedIds = card.relatedIds || [];
+    other.relatedIds = other.relatedIds || [];
+    if(!card.relatedIds.includes(otherId)) card.relatedIds.push(otherId);
+    if(!other.relatedIds.includes(card.id)) other.relatedIds.push(card.id);
+    logHistory(card, `関連タスクを追加: 「${other.title}」`);
+    logHistory(other, `関連タスクを追加: 「${card.title}」`);
+    save();
+    renderRelated(card);
+    renderHistory(card);
+  }
+
+  function unlinkRelated(card, otherId){
+    const other = data.cards.find(c=>c.id===otherId);
+    card.relatedIds = (card.relatedIds||[]).filter(id=>id!==otherId);
+    logHistory(card, `関連タスクを解除: 「${other ? other.title : "(削除済みのカード)"}」`);
+    if(other){
+      other.relatedIds = (other.relatedIds||[]).filter(id=>id!==card.id);
+      logHistory(other, `関連タスクを解除: 「${card.title}」`);
+    }
+    save();
+    renderRelated(card);
+    renderHistory(card);
+  }
+
+  document.getElementById("relatedAddBtn").addEventListener("click", ()=>{
+    const otherId = relatedAddSelect.value;
+    if(!otherId) return;
+    const card = currentCard(); if(!card) return;
+    linkRelated(card, otherId);
+  });
+
+  function renderHistory(card){
+    const hist = card.history || [];
+    historyCountEl.textContent = hist.length;
+    historyListEl.innerHTML = "";
+    hist.slice().reverse().forEach(h=>{
+      const li = document.createElement("li");
+      const dt = new Date(h.ts);
+      li.textContent = `${dt.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})} ${h.user}: ${h.message}`;
+      historyListEl.appendChild(li);
+    });
+  }
+
   cardTitleInput.addEventListener("change", ()=>{
     const card = currentCard(); if(!card) return;
-    card.title = cardTitleInput.value || "無題のカード";
-    save();
+    const newVal = cardTitleInput.value || "無題のカード";
+    if(newVal !== card.title){
+      logHistory(card, `タイトルを変更: 「${card.title}」→「${newVal}」`);
+      card.title = newVal;
+      save();
+      renderHistory(card);
+    }
   });
   cardDescInput.addEventListener("change", ()=>{
     const card = currentCard(); if(!card) return;
-    card.desc = cardDescInput.value;
-    save();
+    if(cardDescInput.value !== card.desc){
+      card.desc = cardDescInput.value;
+      logHistory(card, "説明を更新");
+      save();
+      renderHistory(card);
+    }
   });
   cardAssigneeInput.addEventListener("change", ()=>{
     const card = currentCard(); if(!card) return;
-    card.assignee = cardAssigneeInput.value;
-    save();
+    const newVal = cardAssigneeInput.value;
+    if(newVal !== card.assignee){
+      logHistory(card, `担当者を変更: 「${card.assignee||"未設定"}」→「${newVal||"未設定"}」`);
+      card.assignee = newVal;
+      save();
+      renderHistory(card);
+    }
+  });
+  cardPhaseInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    const newVal = cardPhaseInput.value;
+    if(newVal !== card.phaseId){
+      logHistory(card, `フェーズを変更: 「${phaseName(card.phaseId)||"未設定"}」→「${phaseName(newVal)||"未設定"}」`);
+      card.phaseId = newVal;
+      save();
+      renderHistory(card);
+    }
+  });
+  cardStartInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    if(cardStartInput.value !== card.startDate){
+      logHistory(card, `開始日を変更: 「${card.startDate||"未設定"}」→「${cardStartInput.value||"未設定"}」`);
+      card.startDate = cardStartInput.value;
+      save();
+      renderHistory(card);
+    }
   });
   cardDueInput.addEventListener("change", ()=>{
     const card = currentCard(); if(!card) return;
-    card.dueDate = cardDueInput.value;
-    save();
+    if(cardDueInput.value !== card.dueDate){
+      logHistory(card, `期限を変更: 「${card.dueDate||"未設定"}」→「${cardDueInput.value||"未設定"}」`);
+      card.dueDate = cardDueInput.value;
+      save();
+      renderHistory(card);
+    }
   });
 
   function addChecklistItem(){
@@ -757,6 +1045,7 @@
   document.getElementById("cardDeleteBtn").addEventListener("click", ()=>{
     const card = currentCard(); if(!card) return;
     if(!confirm(`「${card.title}」を削除しますか？`)) return;
+    data.cards.forEach(c=>{ c.relatedIds = (c.relatedIds||[]).filter(id=>id!==card.id); });
     data.cards = data.cards.filter(c=>c.id!==card.id);
     save();
     closeCardModal();
@@ -810,6 +1099,50 @@
   document.getElementById("memberAddBtn").addEventListener("click", addMember);
   memberNewInput.addEventListener("keydown", e=>{ if(e.key==="Enter") addMember(); });
 
+  const phaseListEl = document.getElementById("phaseList");
+
+  function renderPhaseSettingsList(){
+    phaseListEl.innerHTML = "";
+    data.phases.forEach(p=>{
+      const row = document.createElement("div");
+      row.className = "memberRow";
+      row.innerHTML = `
+        <input type="text" value="${escapeHtml(p.name)}">
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap;">${p.id===data.currentPhaseId?"📌 ":""}${p.archived?"アーカイブ済み":"進行中"}</span>
+        <button class="archiveBtn" title="${p.archived?"再開する":"アーカイブする"}">${p.archived?"⤴":"🗄"}</button>
+        <button class="delBtn" title="削除">✕</button>
+      `;
+      row.querySelector("input").addEventListener("change", e=>{
+        p.name = e.target.value.trim() || p.name;
+        save();
+        renderBoard();
+      });
+      row.querySelector(".archiveBtn").addEventListener("click", ()=>{
+        p.archived = !p.archived;
+        if(p.archived && data.boardPhaseFilter===p.id) data.boardPhaseFilter = "all";
+        save();
+        renderPhaseSettingsList();
+        renderBoard();
+      });
+      row.querySelector(".delBtn").addEventListener("click", ()=>{
+        const count = data.cards.filter(c=>c.phaseId===p.id).length;
+        if(!confirm(`「${p.name}」を削除しますか？${count>0?`(${count}件のカードは未設定になります)`:""}`)) return;
+        data.cards.forEach(c=>{ if(c.phaseId===p.id) c.phaseId=""; });
+        data.phases = data.phases.filter(x=>x.id!==p.id);
+        if(data.phases.length===0){
+          const np = {id: uid(), name: "フェーズ1", archived:false, createdAt: Date.now()};
+          data.phases = [np];
+        }
+        if(!data.phases.find(x=>x.id===data.currentPhaseId)) data.currentPhaseId = data.phases[0].id;
+        if(data.boardPhaseFilter!=="all" && !data.phases.find(x=>x.id===data.boardPhaseFilter)) data.boardPhaseFilter = "all";
+        save();
+        renderPhaseSettingsList();
+        renderBoard();
+      });
+      phaseListEl.appendChild(row);
+    });
+  }
+
   alertDaysInput.addEventListener("change", ()=>{
     const v = parseInt(alertDaysInput.value, 10);
     data.alertDays = isNaN(v) ? 2 : Math.max(0, v);
@@ -828,6 +1161,7 @@
 
   document.getElementById("settingsBtn").addEventListener("click", ()=>{
     renderMemberList();
+    renderPhaseSettingsList();
     alertDaysInput.value = data.alertDays;
     settingsModalOverlay.classList.add("show");
   });
@@ -865,7 +1199,7 @@
         }
         if(!confirm("現在のボードのカード・列・メンバーを、読み込んだ内容で置き換えます。よろしいですか？\n(パスワード設定は維持されます)")) return;
         const keepHash = data.passwordHash;
-        data = Object.assign(defaultData(), imported, {passwordHash: keepHash});
+        data = normalizeData(Object.assign({}, imported, {passwordHash: keepHash}));
         save();
         renderUserSelect();
         renderBoard();
