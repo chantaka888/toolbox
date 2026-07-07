@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>局タスク管理ボード</title>
+<style>
+  :root{
+    --bg:#f2f4f7;
+    --panel:#ffffff;
+    --border:#dde1e7;
+    --text:#1f2430;
+    --muted:#6b7280;
+    --accent:#3b5bdb;
+    --accent-soft:#e8ecfd;
+    --danger:#e03131;
+    --danger-soft:#ffe3e3;
+    --warn:#f08c00;
+    --warn-soft:#fff3bf;
+    --ok:#2f9e44;
+    --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Hiragino Sans","Yu Gothic",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);}
+  button{font-family:inherit;cursor:pointer;}
+  input,textarea,select{font-family:inherit;}
+
+  /* ---------- ロック画面 ---------- */
+  #lockScreen{
+    position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000;
+  }
+  #lockScreen.hidden{display:none;}
+  .lockBox{background:var(--panel);padding:32px 28px;border-radius:12px;box-shadow:var(--shadow);width:320px;max-width:90vw;}
+  .lockBox h1{font-size:18px;margin:0 0 4px;}
+  .lockBox p{font-size:13px;color:var(--muted);margin:0 0 16px;}
+  .lockBox input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px;}
+  .lockBox button.primary{width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;}
+  .lockBox .err{color:var(--danger);font-size:12px;min-height:16px;margin-bottom:4px;}
+  .lockBox .hint{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5;}
+
+  /* ---------- ヘッダー ---------- */
+  header{
+    background:var(--panel);border-bottom:1px solid var(--border);
+    padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    position:sticky;top:0;z-index:50;
+  }
+  header h1{font-size:17px;margin:0;white-space:nowrap;}
+  header .spacer{flex:1;}
+  header .userSelect{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
+  header select, header input[type=text]{padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;}
+  .iconBtn{
+    padding:7px 12px;border:1px solid var(--border);background:#fff;border-radius:7px;font-size:13px;color:var(--text);
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  }
+  .iconBtn:hover{background:#f7f8fa;}
+  .iconBtn.accentBtn{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .iconBtn.accentBtn:hover{filter:brightness(1.05);}
+
+  /* ---------- アラートバナー ---------- */
+  #alertBanner{
+    display:none;margin:12px 20px 0;padding:10px 16px;border-radius:8px;font-size:13px;
+    background:var(--danger-soft);color:#a61e1e;border:1px solid #ffc9c9;gap:8px;align-items:center;flex-wrap:wrap;
+  }
+  #alertBanner.show{display:flex;}
+  #alertBanner b{font-weight:700;}
+  #alertBanner .warnCount{color:#8a5300;}
+
+  /* ---------- ボード ---------- */
+  main{padding:16px 20px 60px;}
+  #board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:20px;}
+  .column{
+    background:#eceef2;border-radius:10px;width:280px;flex:0 0 280px;
+    display:flex;flex-direction:column;max-height:calc(100vh - 150px);
+  }
+  .column.dragover{outline:2px dashed var(--accent);outline-offset:-2px;}
+  .columnHead{
+    display:flex;align-items:center;gap:6px;padding:12px 12px 8px;
+  }
+  .columnHead .title{
+    font-size:14px;font-weight:700;flex:1;background:transparent;border:none;padding:2px 4px;border-radius:6px;
+  }
+  .columnHead .title:focus{background:#fff;outline:1px solid var(--border);}
+  .columnHead .count{font-size:12px;color:var(--muted);background:#fff;border-radius:10px;padding:1px 8px;}
+  .columnHead .delColBtn{background:none;border:none;color:var(--muted);font-size:14px;padding:2px 4px;}
+  .columnHead .delColBtn:hover{color:var(--danger);}
+  .cardList{flex:1;overflow-y:auto;padding:0 10px;display:flex;flex-direction:column;gap:8px;min-height:30px;}
+  .addCardBtn{
+    margin:8px 10px 12px;background:none;border:1px dashed #c3c9d3;border-radius:8px;padding:8px;
+    font-size:13px;color:var(--muted);text-align:center;
+  }
+  .addCardBtn:hover{background:#fff;border-color:var(--accent);color:var(--accent);}
+  .addColumnBtn{
+    flex:0 0 200px;border:2px dashed #c3c9d3;border-radius:10px;background:none;color:var(--muted);
+    height:44px;font-size:13px;
+  }
+  .addColumnBtn:hover{border-color:var(--accent);color:var(--accent);}
+
+  .card{
+    background:#fff;border-radius:8px;padding:10px 11px;box-shadow:var(--shadow);cursor:grab;
+    border-left:4px solid #cfd4dc;
+  }
+  .card:active{cursor:grabbing;}
+  .card.dragging{opacity:.4;}
+  .card.overdue{border-left-color:var(--danger);}
+  .card.soon{border-left-color:var(--warn);}
+  .card .cTitle{font-size:13.5px;font-weight:600;margin-bottom:6px;word-break:break-word;}
+  .card .cMeta{display:flex;flex-wrap:wrap;gap:5px;font-size:11px;}
+  .card .badge{border-radius:5px;padding:2px 6px;background:#f1f3f5;color:var(--muted);}
+  .card .badge.assignee{background:var(--accent-soft);color:var(--accent);}
+  .card .badge.due{background:#f1f3f5;color:var(--muted);}
+  .card .badge.due.overdue{background:var(--danger-soft);color:var(--danger);}
+  .card .badge.due.soon{background:var(--warn-soft);color:#8a5300;}
+  .card .cProgress{margin-top:6px;font-size:11px;color:var(--muted);}
+
+  /* ---------- モーダル ---------- */
+  .modalOverlay{
+    position:fixed;inset:0;background:rgba(20,22,30,.45);display:none;align-items:flex-start;justify-content:center;
+    z-index:200;padding:40px 16px;overflow-y:auto;
+  }
+  .modalOverlay.show{display:flex;}
+  .modal{background:#fff;border-radius:12px;width:520px;max-width:100%;box-shadow:var(--shadow);}
+  .modal .mHead{display:flex;align-items:center;padding:16px 18px;border-bottom:1px solid var(--border);}
+  .modal .mHead input{flex:1;font-size:16px;font-weight:700;border:none;padding:4px 6px;border-radius:6px;}
+  .modal .mHead input:focus{outline:1px solid var(--border);}
+  .modal .closeBtn{background:none;border:none;font-size:18px;color:var(--muted);padding:2px 8px;}
+  .modal .mBody{padding:16px 18px;display:flex;flex-direction:column;gap:16px;max-height:70vh;overflow-y:auto;}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600;}
+  .field textarea{width:100%;min-height:64px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;}
+  .fieldRow{display:flex;gap:12px;}
+  .fieldRow .field{flex:1;}
+  .field select, .field input[type=date]{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:13px;}
+
+  .checklist ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;}
+  .checklist li{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .checklist li span{flex:1;}
+  .checklist li.done span{text-decoration:line-through;color:var(--muted);}
+  .checklist li button{background:none;border:none;color:var(--muted);font-size:13px;}
+  .checklist li button:hover{color:var(--danger);}
+  .addRow{display:flex;gap:6px;margin-top:8px;}
+  .addRow input{flex:1;border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-size:13px;}
+  .addRow button{border:1px solid var(--border);background:#fff;border-radius:7px;padding:0 12px;font-size:13px;}
+  .addRow button:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+
+  .comments .cItem{background:#f7f8fa;border-radius:8px;padding:8px 10px;font-size:13px;}
+  .comments .cItem .cMetaLine{font-size:11px;color:var(--muted);margin-bottom:3px;display:flex;justify-content:space-between;}
+  .comments .cItem .cMetaLine button{background:none;border:none;color:var(--muted);font-size:11px;}
+  .comments .cItem .cMetaLine button:hover{color:var(--danger);}
+  .comments .cList{display:flex;flex-direction:column;gap:8px;max-height:180px;overflow-y:auto;}
+
+  .mFoot{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-top:1px solid var(--border);}
+  .deleteCardBtn{background:none;border:1px solid var(--danger);color:var(--danger);border-radius:7px;padding:7px 12px;font-size:12px;}
+  .deleteCardBtn:hover{background:var(--danger-soft);}
+
+  /* ---------- 設定モーダル ---------- */
+  .settingsList{display:flex;flex-direction:column;gap:8px;}
+  .memberRow{display:flex;gap:6px;align-items:center;}
+  .memberRow input{flex:1;border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-size:13px;}
+  .memberRow button{background:none;border:none;color:var(--muted);font-size:14px;}
+  .memberRow button:hover{color:var(--danger);}
+
+  footer.hint{padding:0 20px 30px;font-size:11px;color:var(--muted);}
+  @media (max-width:600px){
+    .modal{width:100%;}
+    header h1{font-size:15px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ロック画面 -->
+<div id="lockScreen">
+  <div class="lockBox">
+    <h1 id="lockTitle">パスワードを入力</h1>
+    <p id="lockDesc">このデバイスでボードを開くための合言葉です。</p>
+    <div class="err" id="lockErr"></div>
+    <input type="password" id="lockPass" placeholder="パスワード">
+    <input type="password" id="lockPass2" placeholder="パスワード(確認)" style="display:none;">
+    <button class="primary" id="lockSubmit">開く</button>
+    <div class="hint">※このロックはブラウザ内だけの簡易的なものです。データ自体はこの端末のブラウザに保存され、メンバー間で共有するには「書き出し/読み込み」機能でJSONファイルをやり取りしてください。</div>
+  </div>
+</div>
+
+<header>
+  <h1>📋 局タスク管理ボード</h1>
+  <div class="spacer"></div>
+  <div class="userSelect">
+    自分: <select id="currentUserSelect"></select>
+  </div>
+  <button class="iconBtn" id="filterClearBtn" style="display:none;">絞り込み解除</button>
+  <button class="iconBtn" id="settingsBtn">⚙ 設定</button>
+  <button class="iconBtn" id="exportBtn">↓ 書き出し</button>
+  <button class="iconBtn" id="importBtn">↑ 読み込み</button>
+  <input type="file" id="importFile" accept="application/json" style="display:none;">
+  <button class="iconBtn accentBtn" id="notifyBtn">🔔 通知を有効化</button>
+</header>
+
+<div id="alertBanner"></div>
+
+<main>
+  <div id="board"></div>
+</main>
+
+<footer class="hint">データはこの端末のブラウザ(localStorage)に保存されます。他のメンバーと共有する場合は「書き出し」でJSONを渡し、相手に「読み込み」してもらってください。</footer>
+
+<!-- カード編集モーダル -->
+<div class="modalOverlay" id="cardModalOverlay">
+  <div class="modal">
+    <div class="mHead">
+      <input type="text" id="cardTitleInput" placeholder="カードのタイトル">
+      <button class="closeBtn" id="cardModalClose">✕</button>
+    </div>
+    <div class="mBody">
+      <div class="field">
+        <label>説明</label>
+        <textarea id="cardDescInput" placeholder="詳細・メモ"></textarea>
+      </div>
+      <div class="fieldRow">
+        <div class="field">
+          <label>担当者</label>
+          <select id="cardAssigneeInput"></select>
+        </div>
+        <div class="field">
+          <label>期限</label>
+          <input type="date" id="cardDueInput">
+        </div>
+      </div>
+      <div class="field checklist">
+        <label>チェックリスト</label>
+        <ul id="checklistItems"></ul>
+        <div class="addRow">
+          <input type="text" id="checklistNewInput" placeholder="新しい項目を追加してEnter">
+          <button id="checklistAddBtn">追加</button>
+        </div>
+      </div>
+      <div class="field comments">
+        <label>コメント</label>
+        <div class="cList" id="commentList"></div>
+        <div class="addRow">
+          <input type="text" id="commentNewInput" placeholder="コメントを入力してEnter">
+          <button id="commentAddBtn">送信</button>
+        </div>
+      </div>
+    </div>
+    <div class="mFoot">
+      <button class="deleteCardBtn" id="cardDeleteBtn">このカードを削除</button>
+      <button class="iconBtn accentBtn" id="cardModalDone">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 設定モーダル -->
+<div class="modalOverlay" id="settingsModalOverlay">
+  <div class="modal">
+    <div class="mHead">
+      <div style="font-size:16px;font-weight:700;">設定</div>
+      <button class="closeBtn" id="settingsModalClose">✕</button>
+    </div>
+    <div class="mBody">
+      <div class="field">
+        <label>メンバー一覧(担当者の選択肢になります)</label>
+        <div class="settingsList" id="memberList"></div>
+        <div class="addRow">
+          <input type="text" id="memberNewInput" placeholder="メンバー名を追加してEnter">
+          <button id="memberAddBtn">追加</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>期限アラートの基準日数</label>
+        <input type="number" id="alertDaysInput" min="0" max="30" style="width:100px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;">
+        <span style="font-size:12px;color:var(--muted);"> 日以内を「まもなく期限」として警告表示します</span>
+      </div>
+      <div class="field">
+        <label>ロック用パスワードの変更</label>
+        <div class="addRow">
+          <input type="password" id="newPassInput" placeholder="新しいパスワード">
+          <button id="changePassBtn">変更</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const STORAGE_KEY = "kanban_bureau_data_v1";
+  const SESSION_UNLOCK_KEY = "kanban_bureau_unlocked_v1";
+
+  const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+
+  async function sha256Hex(str){
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+
+  function defaultData(){
+    return {
+      version: 1,
+      passwordHash: null,
+      alertDays: 2,
+      members: ["局長","部下A","部下B"],
+      currentUser: "局長",
+      columns: [
+        {id: uid(), name: "未着手"},
+        {id: uid(), name: "進行中"},
+        {id: uid(), name: "完了"}
+      ],
+      cards: []
+    };
+  }
+
+  let data = load();
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return defaultData();
+      const parsed = JSON.parse(raw);
+      // 最低限のフィールド補完
+      const d = Object.assign(defaultData(), parsed);
+      if(!Array.isArray(d.columns) || d.columns.length===0) d.columns = defaultData().columns;
+      if(!Array.isArray(d.cards)) d.cards = [];
+      if(!Array.isArray(d.members) || d.members.length===0) d.members = defaultData().members;
+      return d;
+    }catch(e){
+      console.error("データ読み込みエラー", e);
+      return defaultData();
+    }
+  }
+
+  function save(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  // ---------------- ロック画面 ----------------
+  const lockScreen = document.getElementById("lockScreen");
+  const lockTitle = document.getElementById("lockTitle");
+  const lockDesc = document.getElementById("lockDesc");
+  const lockErr = document.getElementById("lockErr");
+  const lockPass = document.getElementById("lockPass");
+  const lockPass2 = document.getElementById("lockPass2");
+  const lockSubmit = document.getElementById("lockSubmit");
+
+  function isFirstRun(){
+    return !data.passwordHash;
+  }
+
+  function showLock(){
+    lockErr.textContent = "";
+    if(isFirstRun()){
+      lockTitle.textContent = "パスワードを設定";
+      lockDesc.textContent = "この端末でボードを開くための合言葉を決めてください。";
+      lockPass2.style.display = "block";
+      lockPass.placeholder = "新しいパスワード";
+    }else{
+      lockTitle.textContent = "パスワードを入力";
+      lockDesc.textContent = "このデバイスでボードを開くための合言葉です。";
+      lockPass2.style.display = "none";
+      lockPass.placeholder = "パスワード";
+    }
+    lockPass.value = "";
+    lockPass2.value = "";
+    lockScreen.classList.remove("hidden");
+    setTimeout(()=>lockPass.focus(), 50);
+  }
+
+  async function handleLockSubmit(){
+    const pass = lockPass.value;
+    if(isFirstRun()){
+      if(pass.length < 4){ lockErr.textContent = "4文字以上で設定してください"; return; }
+      if(pass !== lockPass2.value){ lockErr.textContent = "確認用パスワードが一致しません"; return; }
+      data.passwordHash = await sha256Hex(pass);
+      save();
+      unlock();
+    }else{
+      const hash = await sha256Hex(pass);
+      if(hash === data.passwordHash){
+        unlock();
+      }else{
+        lockErr.textContent = "パスワードが違います";
+      }
+    }
+  }
+
+  function unlock(){
+    sessionStorage.setItem(SESSION_UNLOCK_KEY, "1");
+    lockScreen.classList.add("hidden");
+    init();
+  }
+
+  lockSubmit.addEventListener("click", handleLockSubmit);
+  [lockPass, lockPass2].forEach(el=>{
+    el.addEventListener("keydown", e=>{ if(e.key==="Enter") handleLockSubmit(); });
+  });
+
+  // ---------------- 共通ユーティリティ ----------------
+  function todayStr(){
+    const d = new Date();
+    return d.toISOString().slice(0,10);
+  }
+
+  function dueStatus(dueDate){
+    if(!dueDate) return null;
+    const diffDays = Math.floor((new Date(dueDate) - new Date(todayStr())) / 86400000);
+    if(diffDays < 0) return "overdue";
+    if(diffDays <= data.alertDays) return "soon";
+    return null;
+  }
+
+  // ---------------- 描画: ヘッダー・フィルタ ----------------
+  const currentUserSelect = document.getElementById("currentUserSelect");
+  let assigneeFilter = null;
+
+  function renderUserSelect(){
+    currentUserSelect.innerHTML = data.members.map(m=>
+      `<option value="${escapeHtml(m)}" ${m===data.currentUser?"selected":""}>${escapeHtml(m)}</option>`
+    ).join("");
+  }
+  currentUserSelect.addEventListener("change", ()=>{
+    data.currentUser = currentUserSelect.value;
+    save();
+  });
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  // ---------------- アラートバナー ----------------
+  function renderAlertBanner(){
+    const banner = document.getElementById("alertBanner");
+    const overdue = data.cards.filter(c=>dueStatus(c.dueDate)==="overdue");
+    const soon = data.cards.filter(c=>dueStatus(c.dueDate)==="soon");
+    if(overdue.length===0 && soon.length===0){
+      banner.classList.remove("show");
+      banner.innerHTML = "";
+      return;
+    }
+    let html = "";
+    if(overdue.length>0) html += `<span>⚠ <b>期限超過</b>: ${overdue.length}件 (${overdue.slice(0,3).map(c=>escapeHtml(c.title)).join("、")}${overdue.length>3?" ほか":""})</span>`;
+    if(soon.length>0) html += `<span class="warnCount">⏰ まもなく期限: ${soon.length}件 (${soon.slice(0,3).map(c=>escapeHtml(c.title)).join("、")}${soon.length>3?" ほか":""})</span>`;
+    banner.innerHTML = html;
+    banner.classList.add("show");
+  }
+
+  function maybeNotify(){
+    if(Notification.permission !== "granted") return;
+    const overdue = data.cards.filter(c=>dueStatus(c.dueDate)==="overdue");
+    const soon = data.cards.filter(c=>dueStatus(c.dueDate)==="soon");
+    if(overdue.length===0 && soon.length===0) return;
+    const key = "kanban_last_notify_" + todayStr();
+    if(sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+    const parts = [];
+    if(overdue.length) parts.push(`期限超過 ${overdue.length}件`);
+    if(soon.length) parts.push(`期限間近 ${soon.length}件`);
+    new Notification("局タスク管理ボード", { body: parts.join(" / ") });
+  }
+
+  document.getElementById("notifyBtn").addEventListener("click", ()=>{
+    if(!("Notification" in window)){
+      alert("このブラウザは通知に対応していません");
+      return;
+    }
+    Notification.requestPermission().then(p=>{
+      if(p === "granted"){
+        alert("通知を有効にしました。期限が近いタスクがある時に通知します。");
+        maybeNotify();
+      }
+    });
+  });
+
+  // ---------------- ボード描画 ----------------
+  const boardEl = document.getElementById("board");
+
+  function renderBoard(){
+    boardEl.innerHTML = "";
+    data.columns.forEach(col=>{
+      const colEl = document.createElement("div");
+      colEl.className = "column";
+      colEl.dataset.colId = col.id;
+
+      const cardsInCol = data.cards.filter(c=>c.columnId===col.id && (!assigneeFilter || c.assignee===assigneeFilter));
+
+      colEl.innerHTML = `
+        <div class="columnHead">
+          <input class="title" value="${escapeHtml(col.name)}" data-col-id="${col.id}">
+          <span class="count">${cardsInCol.length}</span>
+          <button class="delColBtn" data-col-id="${col.id}" title="この列を削除">✕</button>
+        </div>
+        <div class="cardList" data-col-id="${col.id}"></div>
+        <button class="addCardBtn" data-col-id="${col.id}">＋ カードを追加</button>
+      `;
+      boardEl.appendChild(colEl);
+
+      const listEl = colEl.querySelector(".cardList");
+      cardsInCol.forEach(card=>{
+        listEl.appendChild(renderCard(card));
+      });
+
+      setupColumnDnD(listEl, col.id);
+    });
+
+    const addColBtn = document.createElement("button");
+    addColBtn.className = "addColumnBtn";
+    addColBtn.textContent = "＋ 列を追加";
+    addColBtn.addEventListener("click", ()=>{
+      const name = prompt("新しい列の名前");
+      if(!name) return;
+      data.columns.push({id: uid(), name});
+      save();
+      renderBoard();
+    });
+    boardEl.appendChild(addColBtn);
+
+    // 列名編集・削除・カード追加のイベント
+    boardEl.querySelectorAll(".columnHead .title").forEach(inp=>{
+      inp.addEventListener("change", ()=>{
+        const col = data.columns.find(c=>c.id===inp.dataset.colId);
+        if(col){ col.name = inp.value || col.name; save(); }
+      });
+    });
+    boardEl.querySelectorAll(".delColBtn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const colId = btn.dataset.colId;
+        const count = data.cards.filter(c=>c.columnId===colId).length;
+        if(!confirm(`この列を削除しますか？${count>0 ? `(中の${count}件のカードも削除されます)` : ""}`)) return;
+        data.columns = data.columns.filter(c=>c.id!==colId);
+        data.cards = data.cards.filter(c=>c.columnId!==colId);
+        save();
+        renderBoard();
+      });
+    });
+    boardEl.querySelectorAll(".addCardBtn").forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        const card = {
+          id: uid(), columnId: btn.dataset.colId, title: "新しいカード", desc: "",
+          assignee: data.currentUser, dueDate: "", checklist: [], comments: [], createdAt: Date.now()
+        };
+        data.cards.push(card);
+        save();
+        renderBoard();
+        openCardModal(card.id);
+      });
+    });
+
+    renderAlertBanner();
+    maybeNotify();
+  }
+
+  function renderCard(card){
+    const el = document.createElement("div");
+    el.className = "card";
+    el.draggable = true;
+    el.dataset.cardId = card.id;
+    const status = dueStatus(card.dueDate);
+    if(status) el.classList.add(status);
+
+    const doneCount = card.checklist.filter(i=>i.done).length;
+    const progressHtml = card.checklist.length>0
+      ? `<div class="cProgress">☑ ${doneCount}/${card.checklist.length}</div>` : "";
+
+    el.innerHTML = `
+      <div class="cTitle">${escapeHtml(card.title)}</div>
+      <div class="cMeta">
+        ${card.assignee ? `<span class="badge assignee">${escapeHtml(card.assignee)}</span>` : ""}
+        ${card.dueDate ? `<span class="badge due ${status||""}">${escapeHtml(card.dueDate)}</span>` : ""}
+        ${card.comments.length>0 ? `<span class="badge">💬 ${card.comments.length}</span>` : ""}
+      </div>
+      ${progressHtml}
+    `;
+
+    el.addEventListener("click", ()=> openCardModal(card.id));
+
+    el.addEventListener("dragstart", e=>{
+      el.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", card.id);
+    });
+    el.addEventListener("dragend", ()=> el.classList.remove("dragging"));
+
+    return el;
+  }
+
+  function setupColumnDnD(listEl, colId){
+    const colEl = listEl.closest(".column");
+    listEl.addEventListener("dragover", e=>{
+      e.preventDefault();
+      colEl.classList.add("dragover");
+      const dragging = boardEl.querySelector(".card.dragging");
+      if(!dragging) return;
+      const after = getDragAfterElement(listEl, e.clientY);
+      if(after == null) listEl.appendChild(dragging);
+      else listEl.insertBefore(dragging, after);
+    });
+    listEl.addEventListener("dragleave", e=>{
+      if(e.target === listEl) colEl.classList.remove("dragover");
+    });
+    listEl.addEventListener("drop", e=>{
+      e.preventDefault();
+      colEl.classList.remove("dragover");
+      const cardId = e.dataTransfer.getData("text/plain");
+      const card = data.cards.find(c=>c.id===cardId);
+      if(card){
+        card.columnId = colId;
+        // 並び順をDOM順に反映
+        const order = Array.from(listEl.querySelectorAll(".card")).map(el=>el.dataset.cardId);
+        const others = data.cards.filter(c=>!order.includes(c.id));
+        const reordered = order.map(id=>data.cards.find(c=>c.id===id)).filter(Boolean);
+        data.cards = [...others.filter(c=>c.columnId!==colId), ...reordered, ...others.filter(c=>c.columnId===colId && !order.includes(c.id))];
+        save();
+      }
+      renderBoard();
+    });
+  }
+
+  function getDragAfterElement(container, y){
+    const els = [...container.querySelectorAll(".card:not(.dragging)")];
+    return els.reduce((closest, child)=>{
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset){
+        return {offset, element: child};
+      }else{
+        return closest;
+      }
+    }, {offset: -Infinity}).element;
+  }
+
+  // ---------------- カードモーダル ----------------
+  const cardModalOverlay = document.getElementById("cardModalOverlay");
+  const cardTitleInput = document.getElementById("cardTitleInput");
+  const cardDescInput = document.getElementById("cardDescInput");
+  const cardAssigneeInput = document.getElementById("cardAssigneeInput");
+  const cardDueInput = document.getElementById("cardDueInput");
+  const checklistItemsEl = document.getElementById("checklistItems");
+  const checklistNewInput = document.getElementById("checklistNewInput");
+  const commentListEl = document.getElementById("commentList");
+  const commentNewInput = document.getElementById("commentNewInput");
+
+  let openCardId = null;
+
+  function openCardModal(cardId){
+    openCardId = cardId;
+    const card = data.cards.find(c=>c.id===cardId);
+    if(!card) return;
+
+    cardTitleInput.value = card.title;
+    cardDescInput.value = card.desc || "";
+    cardAssigneeInput.innerHTML = `<option value="">(未設定)</option>` + data.members.map(m=>
+      `<option value="${escapeHtml(m)}" ${m===card.assignee?"selected":""}>${escapeHtml(m)}</option>`
+    ).join("");
+    cardDueInput.value = card.dueDate || "";
+
+    renderChecklist(card);
+    renderComments(card);
+
+    cardModalOverlay.classList.add("show");
+  }
+
+  function closeCardModal(){
+    cardModalOverlay.classList.remove("show");
+    openCardId = null;
+    renderBoard();
+  }
+
+  function currentCard(){
+    return data.cards.find(c=>c.id===openCardId);
+  }
+
+  function renderChecklist(card){
+    checklistItemsEl.innerHTML = "";
+    card.checklist.forEach(item=>{
+      const li = document.createElement("li");
+      if(item.done) li.className = "done";
+      li.innerHTML = `<input type="checkbox" ${item.done?"checked":""}> <span>${escapeHtml(item.text)}</span> <button title="削除">✕</button>`;
+      li.querySelector("input").addEventListener("change", e=>{
+        item.done = e.target.checked;
+        save();
+        renderChecklist(card);
+      });
+      li.querySelector("button").addEventListener("click", ()=>{
+        card.checklist = card.checklist.filter(i=>i.id!==item.id);
+        save();
+        renderChecklist(card);
+      });
+      checklistItemsEl.appendChild(li);
+    });
+  }
+
+  function renderComments(card){
+    commentListEl.innerHTML = "";
+    card.comments.slice().reverse().forEach(cm=>{
+      const div = document.createElement("div");
+      div.className = "cItem";
+      const dt = new Date(cm.ts);
+      div.innerHTML = `
+        <div class="cMetaLine">
+          <span>${escapeHtml(cm.author)} ・ ${dt.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</span>
+          <button title="削除">✕</button>
+        </div>
+        <div>${escapeHtml(cm.text)}</div>
+      `;
+      div.querySelector("button").addEventListener("click", ()=>{
+        card.comments = card.comments.filter(c=>c.id!==cm.id);
+        save();
+        renderComments(card);
+      });
+      commentListEl.appendChild(div);
+    });
+  }
+
+  cardTitleInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    card.title = cardTitleInput.value || "無題のカード";
+    save();
+  });
+  cardDescInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    card.desc = cardDescInput.value;
+    save();
+  });
+  cardAssigneeInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    card.assignee = cardAssigneeInput.value;
+    save();
+  });
+  cardDueInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    card.dueDate = cardDueInput.value;
+    save();
+  });
+
+  function addChecklistItem(){
+    const text = checklistNewInput.value.trim();
+    if(!text) return;
+    const card = currentCard(); if(!card) return;
+    card.checklist.push({id: uid(), text, done:false});
+    checklistNewInput.value = "";
+    save();
+    renderChecklist(card);
+  }
+  document.getElementById("checklistAddBtn").addEventListener("click", addChecklistItem);
+  checklistNewInput.addEventListener("keydown", e=>{ if(e.key==="Enter") addChecklistItem(); });
+
+  function addComment(){
+    const text = commentNewInput.value.trim();
+    if(!text) return;
+    const card = currentCard(); if(!card) return;
+    card.comments.push({id: uid(), author: data.currentUser, text, ts: Date.now()});
+    commentNewInput.value = "";
+    save();
+    renderComments(card);
+  }
+  document.getElementById("commentAddBtn").addEventListener("click", addComment);
+  commentNewInput.addEventListener("keydown", e=>{ if(e.key==="Enter") addComment(); });
+
+  document.getElementById("cardDeleteBtn").addEventListener("click", ()=>{
+    const card = currentCard(); if(!card) return;
+    if(!confirm(`「${card.title}」を削除しますか？`)) return;
+    data.cards = data.cards.filter(c=>c.id!==card.id);
+    save();
+    closeCardModal();
+  });
+  document.getElementById("cardModalClose").addEventListener("click", closeCardModal);
+  document.getElementById("cardModalDone").addEventListener("click", closeCardModal);
+  cardModalOverlay.addEventListener("click", e=>{ if(e.target===cardModalOverlay) closeCardModal(); });
+
+  // ---------------- 設定モーダル ----------------
+  const settingsModalOverlay = document.getElementById("settingsModalOverlay");
+  const memberListEl = document.getElementById("memberList");
+  const memberNewInput = document.getElementById("memberNewInput");
+  const alertDaysInput = document.getElementById("alertDaysInput");
+  const newPassInput = document.getElementById("newPassInput");
+
+  function renderMemberList(){
+    memberListEl.innerHTML = "";
+    data.members.forEach((m, idx)=>{
+      const row = document.createElement("div");
+      row.className = "memberRow";
+      row.innerHTML = `<input type="text" value="${escapeHtml(m)}"><button title="削除">✕</button>`;
+      row.querySelector("input").addEventListener("change", e=>{
+        const oldName = data.members[idx];
+        const newName = e.target.value.trim() || oldName;
+        data.members[idx] = newName;
+        data.cards.forEach(c=>{ if(c.assignee===oldName) c.assignee = newName; });
+        if(data.currentUser===oldName) data.currentUser = newName;
+        save();
+        renderUserSelect();
+      });
+      row.querySelector("button").addEventListener("click", ()=>{
+        if(!confirm(`「${m}」をメンバー一覧から削除しますか？`)) return;
+        data.members.splice(idx,1);
+        save();
+        renderMemberList();
+        renderUserSelect();
+      });
+      memberListEl.appendChild(row);
+    });
+  }
+
+  function addMember(){
+    const name = memberNewInput.value.trim();
+    if(!name) return;
+    data.members.push(name);
+    memberNewInput.value = "";
+    save();
+    renderMemberList();
+    renderUserSelect();
+  }
+  document.getElementById("memberAddBtn").addEventListener("click", addMember);
+  memberNewInput.addEventListener("keydown", e=>{ if(e.key==="Enter") addMember(); });
+
+  alertDaysInput.addEventListener("change", ()=>{
+    const v = parseInt(alertDaysInput.value, 10);
+    data.alertDays = isNaN(v) ? 2 : Math.max(0, v);
+    save();
+    renderBoard();
+  });
+
+  document.getElementById("changePassBtn").addEventListener("click", async ()=>{
+    const pass = newPassInput.value;
+    if(pass.length < 4){ alert("4文字以上で入力してください"); return; }
+    data.passwordHash = await sha256Hex(pass);
+    save();
+    newPassInput.value = "";
+    alert("パスワードを変更しました");
+  });
+
+  document.getElementById("settingsBtn").addEventListener("click", ()=>{
+    renderMemberList();
+    alertDaysInput.value = data.alertDays;
+    settingsModalOverlay.classList.add("show");
+  });
+  document.getElementById("settingsModalClose").addEventListener("click", ()=>{
+    settingsModalOverlay.classList.remove("show");
+  });
+  settingsModalOverlay.addEventListener("click", e=>{
+    if(e.target===settingsModalOverlay) settingsModalOverlay.classList.remove("show");
+  });
+
+  // ---------------- 書き出し / 読み込み ----------------
+  document.getElementById("exportBtn").addEventListener("click", ()=>{
+    const exportData = Object.assign({}, data, {passwordHash: undefined});
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kanban_${todayStr()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  const importFile = document.getElementById("importFile");
+  document.getElementById("importBtn").addEventListener("click", ()=> importFile.click());
+  importFile.addEventListener("change", ()=>{
+    const file = importFile.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const imported = JSON.parse(reader.result);
+        if(!Array.isArray(imported.cards) || !Array.isArray(imported.columns)){
+          alert("読み込めない形式のファイルです");
+          return;
+        }
+        if(!confirm("現在のボードのカード・列・メンバーを、読み込んだ内容で置き換えます。よろしいですか？\n(パスワード設定は維持されます)")) return;
+        const keepHash = data.passwordHash;
+        data = Object.assign(defaultData(), imported, {passwordHash: keepHash});
+        save();
+        renderUserSelect();
+        renderBoard();
+        alert("読み込みが完了しました");
+      }catch(e){
+        alert("ファイルの読み込みに失敗しました: " + e.message);
+      }
+    };
+    reader.readAsText(file);
+    importFile.value = "";
+  });
+
+  // ---------------- 初期化 ----------------
+  function init(){
+    renderUserSelect();
+    renderBoard();
+  }
+
+  if(sessionStorage.getItem(SESSION_UNLOCK_KEY) === "1" && data.passwordHash){
+    init();
+  }else{
+    showLock();
+  }
+})();
+</script>
+</body>
+</html>
