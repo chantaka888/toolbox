@@ -5,6 +5,14 @@
 
 ---
 
+## 2026-07-22 — 全体縮小・「フェーズ」→「スプリント」リネーム
+
+- `kanban-board/index.html`: 列幅 280px → 230px、レーンラベル幅 130px → 110px
+- `kanban-board/index.html`: カードパディング・フォントサイズ縮小（タイトル 13.5px → 12px、メタ 11px → 10px）
+- `kanban-board/index.html`: ヘッダー・フェーズバー・グリッドギャップを全体的に縮小
+- `kanban-board/index.html`: UI テキスト「フェーズ」→「スプリント」に統一（変数名・CSS クラス名は変更なし）
+- `kanban-board/index.html`: デフォルトデータの初期スプリント名を「スプリント1」に変更
+
 ## 2026-07-22 — スイムレーン（業務種別レーン）機能を追加
 
 - `kanban-board/index.html`: `defaultData()` に `swimlanes` フィールドを追加（デフォルト「全般」レーン）
