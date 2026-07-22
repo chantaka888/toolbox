@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-22 — スイムレーン（業務種別レーン）機能を追加
+
+- `kanban-board/index.html`: `defaultData()` に `swimlanes` フィールドを追加（デフォルト「全般」レーン）
+- `kanban-board/index.html`: `normalizeData()` にスイムレーン補完ロジックを追加（旧データ・カードを先頭レーンへ自動マイグレーション）
+- `kanban-board/index.html`: `visibleCards()` を廃止し `cellCards(colId, laneId)` と `colTotalCards(colId)` に置換
+- `kanban-board/index.html`: `renderBoard()` を2Dグリッド構造（列ヘッダー行 + スイムレーン行×列セル）に全面書き換え
+- `kanban-board/index.html`: `setupColumnDnD()` を `setupCellDnD(listEl, colId, laneId, cellEl)` に置換（レーン間ドロップ対応・dragleaveバグ修正）
+- `kanban-board/index.html`: カード編集モーダルに「業務種別（レーン）」セレクトを追加
+- `kanban-board/index.html`: `openCardModal()` でレーン選択を初期化、変更時に変更履歴へ記録
+
+---
+
 ## 2026-07-07 — 担当者カラーによるカード着色機能を追加
 
 - `kanban-board/index.html`: `memberColors` フィールドをデータ構造に追加

@@ -81,32 +81,54 @@
   #alertBanner .warnCount{color:#8a5300;}
 
   /* ---------- ボード ---------- */
-  main{padding:16px 20px 60px;}
-  #board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:20px;}
-  .column{
-    background:#eceef2;border-radius:10px;width:280px;flex:0 0 280px;
-    display:flex;flex-direction:column;max-height:calc(100vh - 150px);
+  main{padding:16px 0 60px;overflow-x:auto;}
+  #board{display:inline-flex;flex-direction:column;padding:0 20px;min-width:max-content;}
+  /* 列ヘッダー行 */
+  .boardColHeaders{display:flex;gap:14px;margin-bottom:6px;align-items:stretch;}
+  .laneHeaderSpacer{width:130px;flex-shrink:0;}
+  .colHeaderCell{
+    width:280px;flex:0 0 280px;background:#eceef2;border-radius:10px;
+    display:flex;align-items:center;gap:6px;padding:10px 12px;
   }
-  .column.dragover{outline:2px dashed var(--accent);outline-offset:-2px;}
-  .columnHead{
-    display:flex;align-items:center;gap:6px;padding:12px 12px 8px;
-  }
-  .columnHead .title{
+  .colHeaderCell .title{
     font-size:14px;font-weight:700;flex:1;background:transparent;border:none;padding:2px 4px;border-radius:6px;
   }
-  .columnHead .title:focus{background:#fff;outline:1px solid var(--border);}
-  .columnHead .count{font-size:12px;color:var(--muted);background:#fff;border-radius:10px;padding:1px 8px;}
-  .columnHead .delColBtn{background:none;border:none;color:var(--muted);font-size:14px;padding:2px 4px;}
-  .columnHead .delColBtn:hover{color:var(--danger);}
-  .cardList{flex:1;overflow-y:auto;padding:0 10px;display:flex;flex-direction:column;gap:8px;min-height:30px;}
+  .colHeaderCell .title:focus{background:#fff;outline:1px solid var(--border);}
+  .colHeaderCell .count{font-size:12px;color:var(--muted);background:#fff;border-radius:10px;padding:1px 8px;}
+  .colHeaderCell .delColBtn{background:none;border:none;color:var(--muted);font-size:14px;padding:2px 4px;}
+  .colHeaderCell .delColBtn:hover{color:var(--danger);}
+  /* スイムレーン行 */
+  .swimlaneRow{display:flex;gap:14px;padding:10px 0;border-top:2px solid var(--border);}
+  .swimlaneRow:first-of-type{border-top:none;}
+  .laneLabel{
+    width:130px;flex-shrink:0;background:#eceef2;border-radius:8px;
+    display:flex;align-items:center;gap:4px;padding:8px;
+  }
+  .laneLabel input.laneName{
+    flex:1;background:transparent;border:none;font-size:12.5px;font-weight:700;
+    padding:2px 4px;border-radius:6px;min-width:0;color:var(--text);
+  }
+  .laneLabel input.laneName:focus{background:#fff;outline:1px solid var(--border);}
+  .laneLabel .delLaneBtn{background:none;border:none;color:var(--muted);font-size:12px;padding:1px 3px;flex-shrink:0;}
+  .laneLabel .delLaneBtn:hover{color:var(--danger);}
+  /* セル (列×レーン) */
+  .cardCell{width:280px;flex:0 0 280px;background:#eceef2;border-radius:8px;display:flex;flex-direction:column;}
+  .cardCell.dragover{outline:2px dashed var(--accent);outline-offset:-2px;}
+  .cardList{overflow-y:auto;padding:6px 10px 0;display:flex;flex-direction:column;gap:8px;min-height:44px;}
   .addCardBtn{
-    margin:8px 10px 12px;background:none;border:1px dashed #c3c9d3;border-radius:8px;padding:8px;
+    margin:6px 10px 10px;background:none;border:1px dashed #c3c9d3;border-radius:8px;padding:7px;
     font-size:13px;color:var(--muted);text-align:center;
   }
   .addCardBtn:hover{background:#fff;border-color:var(--accent);color:var(--accent);}
+  /* レーン・列追加 */
+  .addLaneBtn{
+    border:2px dashed #c3c9d3;border-radius:8px;background:none;color:var(--muted);
+    height:34px;width:130px;font-size:12px;margin-top:8px;
+  }
+  .addLaneBtn:hover{border-color:var(--accent);color:var(--accent);}
   .addColumnBtn{
-    flex:0 0 200px;border:2px dashed #c3c9d3;border-radius:10px;background:none;color:var(--muted);
-    height:44px;font-size:13px;
+    flex-shrink:0;border:2px dashed #c3c9d3;border-radius:10px;background:none;color:var(--muted);
+    height:44px;font-size:13px;width:200px;align-self:center;
   }
   .addColumnBtn:hover{border-color:var(--accent);color:var(--accent);}
 
@@ -260,6 +282,10 @@
           <select id="cardPhaseInput"></select>
         </div>
       </div>
+      <div class="field">
+        <label>業務種別 (レーン)</label>
+        <select id="cardSwimlaneInput"></select>
+      </div>
       <div class="fieldRow">
         <div class="field">
           <label>開始日</label>
@@ -363,6 +389,7 @@
 
   function defaultData(){
     const phase1 = {id: uid(), name: "フェーズ1", archived:false, createdAt: Date.now()};
+    const lane1 = {id: uid(), name: "全般"};
     return {
       version: 2,
       passwordHash: null,
@@ -375,6 +402,7 @@
         {id: uid(), name: "進行中"},
         {id: uid(), name: "完了"}
       ],
+      swimlanes: [lane1],
       phases: [phase1],
       currentPhaseId: phase1.id,
       boardPhaseFilter: phase1.id,
@@ -403,6 +431,10 @@
       if(typeof c.startDate !== "string") c.startDate = "";
       if(!Array.isArray(c.history)) c.history = [];
       if(!Array.isArray(c.relatedIds)) c.relatedIds = [];
+    });
+    if(!Array.isArray(d.swimlanes) || d.swimlanes.length===0) d.swimlanes = [{id: uid(), name: "全般"}];
+    d.cards.forEach(c=>{
+      if(!c.swimlaneId || !d.swimlanes.find(l=>l.id===c.swimlaneId)) c.swimlaneId = d.swimlanes[0].id;
     });
     return d;
   }
@@ -625,42 +657,55 @@
   // ---------------- ボード描画 ----------------
   const boardEl = document.getElementById("board");
 
-  function visibleCards(colId){
+  function cellCards(colId, laneId){
     return data.cards.filter(c=>{
       if(c.columnId!==colId) return false;
+      if(c.swimlaneId!==laneId) return false;
       if(assigneeFilter && c.assignee!==assigneeFilter) return false;
       if(data.boardPhaseFilter!=="all" && c.phaseId!==data.boardPhaseFilter) return false;
       return true;
     });
   }
 
+  function colTotalCards(colId){
+    return data.cards.filter(c=>{
+      if(c.columnId!==colId) return false;
+      if(assigneeFilter && c.assignee!==assigneeFilter) return false;
+      if(data.boardPhaseFilter!=="all" && c.phaseId!==data.boardPhaseFilter) return false;
+      return true;
+    }).length;
+  }
+
   function renderBoard(){
     renderPhaseTabs();
     boardEl.innerHTML = "";
+
+    // 列ヘッダー行
+    const headerRow = document.createElement("div");
+    headerRow.className = "boardColHeaders";
+    const spacer = document.createElement("div");
+    spacer.className = "laneHeaderSpacer";
+    headerRow.appendChild(spacer);
+
     data.columns.forEach(col=>{
-      const colEl = document.createElement("div");
-      colEl.className = "column";
-      colEl.dataset.colId = col.id;
-
-      const cardsInCol = visibleCards(col.id);
-
-      colEl.innerHTML = `
-        <div class="columnHead">
-          <input class="title" value="${escapeHtml(col.name)}" data-col-id="${col.id}">
-          <span class="count">${cardsInCol.length}</span>
-          <button class="delColBtn" data-col-id="${col.id}" title="この列を削除">✕</button>
-        </div>
-        <div class="cardList" data-col-id="${col.id}"></div>
-        <button class="addCardBtn" data-col-id="${col.id}">＋ カードを追加</button>
+      const cell = document.createElement("div");
+      cell.className = "colHeaderCell";
+      cell.innerHTML = `
+        <input class="title" value="${escapeHtml(col.name)}">
+        <span class="count">${colTotalCards(col.id)}</span>
+        <button class="delColBtn" title="この列を削除">✕</button>
       `;
-      boardEl.appendChild(colEl);
-
-      const listEl = colEl.querySelector(".cardList");
-      cardsInCol.forEach(card=>{
-        listEl.appendChild(renderCard(card));
+      cell.querySelector(".title").addEventListener("change", e=>{
+        col.name = e.target.value || col.name; save();
       });
-
-      setupColumnDnD(listEl, col.id);
+      cell.querySelector(".delColBtn").addEventListener("click", ()=>{
+        const count = data.cards.filter(c=>c.columnId===col.id).length;
+        if(!confirm(`この列を削除しますか？${count>0?`(中の${count}件のカードも削除されます)`:""}`)) return;
+        data.columns = data.columns.filter(c=>c.id!==col.id);
+        data.cards = data.cards.filter(c=>c.columnId!==col.id);
+        save(); renderBoard();
+      });
+      headerRow.appendChild(cell);
     });
 
     const addColBtn = document.createElement("button");
@@ -670,45 +715,80 @@
       const name = prompt("新しい列の名前");
       if(!name) return;
       data.columns.push({id: uid(), name});
-      save();
-      renderBoard();
+      save(); renderBoard();
     });
-    boardEl.appendChild(addColBtn);
+    headerRow.appendChild(addColBtn);
+    boardEl.appendChild(headerRow);
 
-    // 列名編集・削除・カード追加のイベント
-    boardEl.querySelectorAll(".columnHead .title").forEach(inp=>{
-      inp.addEventListener("change", ()=>{
-        const col = data.columns.find(c=>c.id===inp.dataset.colId);
-        if(col){ col.name = inp.value || col.name; save(); }
+    // スイムレーン行
+    data.swimlanes.forEach(lane=>{
+      const row = document.createElement("div");
+      row.className = "swimlaneRow";
+
+      const laneLabel = document.createElement("div");
+      laneLabel.className = "laneLabel";
+      laneLabel.innerHTML = `
+        <input class="laneName" value="${escapeHtml(lane.name)}">
+        <button class="delLaneBtn" title="このレーンを削除">✕</button>
+      `;
+      laneLabel.querySelector(".laneName").addEventListener("change", e=>{
+        lane.name = e.target.value || lane.name; save();
       });
-    });
-    boardEl.querySelectorAll(".delColBtn").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        const colId = btn.dataset.colId;
-        const count = data.cards.filter(c=>c.columnId===colId).length;
-        if(!confirm(`この列を削除しますか？${count>0 ? `(中の${count}件のカードも削除されます)` : ""}`)) return;
-        data.columns = data.columns.filter(c=>c.id!==colId);
-        data.cards = data.cards.filter(c=>c.columnId!==colId);
-        save();
-        renderBoard();
+      laneLabel.querySelector(".delLaneBtn").addEventListener("click", ()=>{
+        if(data.swimlanes.length<=1){ alert("最後のレーンは削除できません"); return; }
+        const count = data.cards.filter(c=>c.swimlaneId===lane.id).length;
+        if(!confirm(`このレーンを削除しますか？${count>0?`(中の${count}件のカードも削除されます)`:""}`)) return;
+        data.swimlanes = data.swimlanes.filter(l=>l.id!==lane.id);
+        data.cards = data.cards.filter(c=>c.swimlaneId!==lane.id);
+        save(); renderBoard();
       });
-    });
-    boardEl.querySelectorAll(".addCardBtn").forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        const card = {
-          id: uid(), columnId: btn.dataset.colId, title: "新しいカード", desc: "",
-          assignee: data.currentUser,
-          phaseId: (data.boardPhaseFilter!=="all") ? data.boardPhaseFilter : (data.currentPhaseId||""),
-          startDate: "", dueDate: "", checklist: [], comments: [], relatedIds: [], history: [],
-          createdAt: Date.now()
-        };
-        logHistory(card, "カードを作成");
-        data.cards.push(card);
-        save();
-        renderBoard();
-        openCardModal(card.id);
+      row.appendChild(laneLabel);
+
+      data.columns.forEach(col=>{
+        const cellEl = document.createElement("div");
+        cellEl.className = "cardCell";
+
+        const listEl = document.createElement("div");
+        listEl.className = "cardList";
+
+        const addBtn = document.createElement("button");
+        addBtn.className = "addCardBtn";
+        addBtn.textContent = "＋ カードを追加";
+        addBtn.addEventListener("click", ()=>{
+          const card = {
+            id: uid(), columnId: col.id, swimlaneId: lane.id,
+            title: "新しいカード", desc: "",
+            assignee: data.currentUser,
+            phaseId: (data.boardPhaseFilter!=="all") ? data.boardPhaseFilter : (data.currentPhaseId||""),
+            startDate: "", dueDate: "", checklist: [], comments: [], relatedIds: [], history: [],
+            createdAt: Date.now()
+          };
+          logHistory(card, "カードを作成");
+          data.cards.push(card);
+          save(); renderBoard();
+          openCardModal(card.id);
+        });
+
+        cellEl.appendChild(listEl);
+        cellEl.appendChild(addBtn);
+        cellCards(col.id, lane.id).forEach(card=>{ listEl.appendChild(renderCard(card)); });
+        setupCellDnD(listEl, col.id, lane.id, cellEl);
+        row.appendChild(cellEl);
       });
+
+      boardEl.appendChild(row);
     });
+
+    const addLaneBtn = document.createElement("button");
+    addLaneBtn.className = "addLaneBtn";
+    addLaneBtn.textContent = "＋ レーンを追加";
+    addLaneBtn.addEventListener("click", ()=>{
+      const name = prompt("新しいレーンの名前（業務種別など）");
+      if(!name) return;
+      data.swimlanes.push({id: uid(), name});
+      save(); renderBoard();
+    });
+    boardEl.appendChild(addLaneBtn);
 
     renderAlertBanner();
     maybeNotify();
@@ -762,11 +842,10 @@
     return el;
   }
 
-  function setupColumnDnD(listEl, colId){
-    const colEl = listEl.closest(".column");
+  function setupCellDnD(listEl, colId, laneId, cellEl){
     listEl.addEventListener("dragover", e=>{
       e.preventDefault();
-      colEl.classList.add("dragover");
+      cellEl.classList.add("dragover");
       const dragging = boardEl.querySelector(".card.dragging");
       if(!dragging) return;
       const after = getDragAfterElement(listEl, e.clientY);
@@ -774,11 +853,11 @@
       else listEl.insertBefore(dragging, after);
     });
     listEl.addEventListener("dragleave", e=>{
-      if(e.target === listEl) colEl.classList.remove("dragover");
+      if(!cellEl.contains(e.relatedTarget)) cellEl.classList.remove("dragover");
     });
     listEl.addEventListener("drop", e=>{
       e.preventDefault();
-      colEl.classList.remove("dragover");
+      cellEl.classList.remove("dragover");
       const cardId = e.dataTransfer.getData("text/plain");
       const card = data.cards.find(c=>c.id===cardId);
       if(card){
@@ -787,12 +866,17 @@
           const newName = (data.columns.find(c=>c.id===colId)||{}).name || "?";
           logHistory(card, `ステータスを「${oldName}」→「${newName}」に変更`);
         }
+        if(card.swimlaneId !== laneId){
+          const oldLane = (data.swimlanes.find(l=>l.id===card.swimlaneId)||{}).name || "?";
+          const newLane = (data.swimlanes.find(l=>l.id===laneId)||{}).name || "?";
+          logHistory(card, `レーンを「${oldLane}」→「${newLane}」に変更`);
+        }
         card.columnId = colId;
-        // 並び順をDOM順に反映
+        card.swimlaneId = laneId;
         const order = Array.from(listEl.querySelectorAll(".card")).map(el=>el.dataset.cardId);
-        const others = data.cards.filter(c=>!order.includes(c.id));
+        const inOrder = new Set(order);
         const reordered = order.map(id=>data.cards.find(c=>c.id===id)).filter(Boolean);
-        data.cards = [...others.filter(c=>c.columnId!==colId), ...reordered, ...others.filter(c=>c.columnId===colId && !order.includes(c.id))];
+        data.cards = [...data.cards.filter(c=>!inOrder.has(c.id)), ...reordered];
         save();
       }
       renderBoard();
@@ -828,6 +912,7 @@
   const relatedAddSelect = document.getElementById("relatedAddSelect");
   const historyListEl = document.getElementById("historyList");
   const historyCountEl = document.getElementById("historyCount");
+  const cardSwimlaneInput = document.getElementById("cardSwimlaneInput");
 
   let openCardId = null;
 
@@ -846,6 +931,9 @@
     ).join("");
     cardStartInput.value = card.startDate || "";
     cardDueInput.value = card.dueDate || "";
+    cardSwimlaneInput.innerHTML = data.swimlanes.map(l=>
+      `<option value="${l.id}" ${l.id===card.swimlaneId?"selected":""}>${escapeHtml(l.name)}</option>`
+    ).join("");
 
     renderChecklist(card);
     renderComments(card);
@@ -1025,6 +1113,18 @@
     if(cardDueInput.value !== card.dueDate){
       logHistory(card, `期限を変更: 「${card.dueDate||"未設定"}」→「${cardDueInput.value||"未設定"}」`);
       card.dueDate = cardDueInput.value;
+      save();
+      renderHistory(card);
+    }
+  });
+  cardSwimlaneInput.addEventListener("change", ()=>{
+    const card = currentCard(); if(!card) return;
+    const newVal = cardSwimlaneInput.value;
+    if(newVal !== card.swimlaneId){
+      const oldLane = (data.swimlanes.find(l=>l.id===card.swimlaneId)||{}).name || "未設定";
+      const newLane = (data.swimlanes.find(l=>l.id===newVal)||{}).name || "未設定";
+      logHistory(card, `レーンを変更: 「${oldLane}」→「${newLane}」`);
+      card.swimlaneId = newVal;
       save();
       renderHistory(card);
     }
