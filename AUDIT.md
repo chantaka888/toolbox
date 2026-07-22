@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-07-22 — スプリントへの期間設定機能を追加
+
+- `kanban-board/index.html`: スプリント（phase）データに `startDate` / `endDate` フィールドを追加
+- `kanban-board/index.html`: `normalizeData()` で既存スプリントへの日付フィールド補完を追加
+- `kanban-board/index.html`: `sprintDateLabel()` ヘルパー追加（MM/DD〜MM/DD 残X日 / X日超過）
+- `kanban-board/index.html`: `renderPhaseTabs()` でスプリントタブに期間・残日数を小さく表示
+- `kanban-board/index.html`: 設定モーダルのスプリント行をカード形式（`.sprintItem`）に刷新し開始日・終了日入力欄を追加
+- `kanban-board/index.html`: 終了日超過時に「X日超過」を赤バッジで表示
+
 ## 2026-07-22 — 全体縮小・「フェーズ」→「スプリント」リネーム
 
 - `kanban-board/index.html`: 列幅 280px → 230px、レーンラベル幅 130px → 110px
