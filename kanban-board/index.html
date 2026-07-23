@@ -25,6 +25,14 @@
   button{font-family:inherit;cursor:pointer;}
   input,textarea,select{font-family:inherit;}
 
+  /* ---------- ローディング ---------- */
+  #loadingScreen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:900;}
+  #loadingScreen.hidden{display:none;}
+  .loadingBox{background:var(--panel);border-radius:12px;padding:32px 40px;text-align:center;box-shadow:var(--shadow);min-width:240px;}
+  .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #loadingMsg{font-size:13px;color:var(--muted);margin:0 0 12px;}
+
   /* ---------- ヘッダー ---------- */
   header{
     background:var(--panel);border-bottom:1px solid var(--border);
@@ -220,11 +228,20 @@
 </head>
 <body>
 
+<div id="loadingScreen">
+  <div class="loadingBox">
+    <div class="spinner"></div>
+    <p id="loadingMsg">読み込み中...</p>
+    <button id="loginRetryBtn" style="display:none;" class="iconBtn accentBtn">再ログイン</button>
+  </div>
+</div>
+
 <header>
   <h1>📋 局タスク管理ボード</h1>
   <div class="spacer"></div>
   <div class="userSelect">
-    自分: <select id="currentUserSelect"></select>
+    <select id="currentUserSelect"></select>
+    <button class="iconBtn" id="logoutBtn" style="padding:4px 8px;font-size:12px;">ログアウト</button>
   </div>
   <button class="iconBtn" id="filterClearBtn" style="display:none;">絞り込み解除</button>
   <button class="iconBtn" id="settingsBtn">⚙ 設定</button>
@@ -355,7 +372,15 @@
 (function(){
   "use strict";
 
-  const STORAGE_KEY = "kanban_bureau_data_v1";
+  const BOX_CLIENT_ID    = "wkpnb36allmfibnaxeehnem9aw278tgf";
+  const BOX_REDIRECT_URI = "https://cwu.app.box.com/file/2363311804189";
+  const INDEX_FILE_ID    = "2363311804189";
+  const DATA_FILENAME    = "kanban_data.json";
+  const BOX_TOKEN_KEY    = "kanban_box_token";
+  const BOX_REFRESH_KEY  = "kanban_box_refresh";
+  const BOX_EXP_KEY      = "kanban_box_exp";
+  const BOX_CV_KEY       = "kanban_box_cv";
+  const BOX_DATA_FID_KEY = "kanban_box_dfid";
 
   const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 
@@ -386,7 +411,10 @@
     };
   }
 
-  let data = load();
+  let data = defaultData();
+  let dataFileId = localStorage.getItem(BOX_DATA_FID_KEY) || null;
+  let saveTimer = null;
+  let boxUserName = "";
 
   function normalizeData(parsed){
     // 最低限のフィールド補完(旧バージョンのデータ・外部からのインポートにも対応)
@@ -416,19 +444,112 @@
     return d;
   }
 
-  function load(){
+  // ---------------- ローディング UI ----------------
+  const loadingScreen = document.getElementById("loadingScreen");
+  const loadingMsg    = document.getElementById("loadingMsg");
+  const loginRetryBtn = document.getElementById("loginRetryBtn");
+  function showLoading(msg){ loadingMsg.textContent = msg||"読み込み中..."; loginRetryBtn.style.display="none"; loadingScreen.classList.remove("hidden"); }
+  function hideLoading(){ loadingScreen.classList.add("hidden"); }
+  function showError(msg){ loadingMsg.textContent = msg; loginRetryBtn.style.display="inline-flex"; loadingScreen.classList.remove("hidden"); }
+  loginRetryBtn.addEventListener("click", ()=>{ clearAuth(); redirectToBoxLogin(); });
+
+  // ---------------- Box 認証 ----------------
+  function getAccessToken(){ return localStorage.getItem(BOX_TOKEN_KEY); }
+  function isTokenExpired(){ return Date.now() > parseInt(localStorage.getItem(BOX_EXP_KEY)||"0") - 60000; }
+  function storeTokens(t){
+    localStorage.setItem(BOX_TOKEN_KEY, t.access_token);
+    localStorage.setItem(BOX_REFRESH_KEY, t.refresh_token);
+    localStorage.setItem(BOX_EXP_KEY, String(Date.now() + t.expires_in * 1000));
+  }
+  function clearAuth(){
+    [BOX_TOKEN_KEY, BOX_REFRESH_KEY, BOX_EXP_KEY, BOX_CV_KEY, BOX_DATA_FID_KEY].forEach(k=>localStorage.removeItem(k));
+  }
+
+  function generateCodeVerifier(){
+    const a = new Uint8Array(32); crypto.getRandomValues(a);
+    return btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
+  }
+  async function generateCodeChallenge(v){
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+    return btoa(String.fromCharCode(...new Uint8Array(h))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
+  }
+  async function redirectToBoxLogin(){
+    const v = generateCodeVerifier();
+    localStorage.setItem(BOX_CV_KEY, v);
+    const ch = await generateCodeChallenge(v);
+    location.href = "https://account.box.com/api/oauth2/authorize?" + new URLSearchParams({
+      response_type:"code", client_id:BOX_CLIENT_ID, redirect_uri:BOX_REDIRECT_URI,
+      code_challenge:ch, code_challenge_method:"S256"
+    });
+  }
+  async function exchangeCode(code){
+    const r = await fetch("https://api.box.com/oauth2/token", {
+      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body: new URLSearchParams({ grant_type:"authorization_code", code, client_id:BOX_CLIENT_ID,
+        code_verifier: localStorage.getItem(BOX_CV_KEY)||"", redirect_uri:BOX_REDIRECT_URI })
+    });
+    if(!r.ok) throw new Error("トークン取得に失敗しました ("+r.status+")");
+    return r.json();
+  }
+  async function tryRefreshToken(){
+    const rt = localStorage.getItem(BOX_REFRESH_KEY);
+    if(!rt) return false;
     try{
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return defaultData();
-      return normalizeData(JSON.parse(raw));
-    }catch(e){
-      console.error("データ読み込みエラー", e);
-      return defaultData();
+      const r = await fetch("https://api.box.com/oauth2/token", {
+        method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body: new URLSearchParams({ grant_type:"refresh_token", refresh_token:rt, client_id:BOX_CLIENT_ID })
+      });
+      if(!r.ok) return false;
+      storeTokens(await r.json()); return true;
+    }catch(e){ return false; }
+  }
+  async function boxFetch(url, opts={}){
+    if(isTokenExpired()){ if(!await tryRefreshToken()){ clearAuth(); redirectToBoxLogin(); return null; } }
+    const r = await fetch(url, {...opts, headers:{Authorization:`Bearer ${getAccessToken()}`, ...(opts.headers||{})}});
+    if(r.status===401){ clearAuth(); redirectToBoxLogin(); return null; }
+    return r;
+  }
+
+  // ---------------- Box データ読み書き ----------------
+  async function getOrCreateDataFile(){
+    if(dataFileId) return;
+    const fi = await boxFetch(`https://api.box.com/2.0/files/${INDEX_FILE_ID}?fields=parent`);
+    if(!fi) return;
+    const {parent} = await fi.json();
+    const li = await boxFetch(`https://api.box.com/2.0/folders/${parent.id}/items?fields=id,name&limit=1000`);
+    if(!li) return;
+    const found = (await li.json()).entries.find(e=>e.name===DATA_FILENAME);
+    if(found){
+      dataFileId = found.id;
+    }else{
+      const fd = new FormData();
+      fd.append("attributes", JSON.stringify({name:DATA_FILENAME, parent:{id:parent.id}}));
+      fd.append("file", new Blob([JSON.stringify(defaultData())],{type:"application/json"}), DATA_FILENAME);
+      const cr = await fetch("https://upload.box.com/api/2.0/files/content",
+        {method:"POST", headers:{Authorization:`Bearer ${getAccessToken()}`}, body:fd});
+      dataFileId = (await cr.json()).entries[0].id;
     }
+    localStorage.setItem(BOX_DATA_FID_KEY, dataFileId);
+  }
+
+  async function loadFromBox(){
+    await getOrCreateDataFile();
+    if(!dataFileId) return defaultData();
+    const r = await boxFetch(`https://api.box.com/2.0/files/${dataFileId}/content`);
+    if(!r) return defaultData();
+    try{ return normalizeData(await r.json()); }catch(e){ return defaultData(); }
   }
 
   function save(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async()=>{
+      if(!dataFileId) return;
+      const fd = new FormData();
+      fd.append("attributes", JSON.stringify({name:DATA_FILENAME}));
+      fd.append("file", new Blob([JSON.stringify(data)],{type:"application/json"}), DATA_FILENAME);
+      await fetch(`https://upload.box.com/api/2.0/files/${dataFileId}/content`,
+        {method:"POST", headers:{Authorization:`Bearer ${getAccessToken()}`}, body:fd});
+    }, 800);
   }
 
   // ---------------- 共通ユーティリティ ----------------
@@ -463,11 +584,8 @@
     currentUserSelect.innerHTML = data.members.map(m=>
       `<option value="${escapeHtml(m)}" ${m===data.currentUser?"selected":""}>${escapeHtml(m)}</option>`
     ).join("");
+    currentUserSelect.disabled = true;
   }
-  currentUserSelect.addEventListener("change", ()=>{
-    data.currentUser = currentUserSelect.value;
-    save();
-  });
 
   document.getElementById("filterClearBtn").addEventListener("click", ()=>{
     assigneeFilter = null;
@@ -1255,6 +1373,8 @@
         }
         if(!confirm("現在のボードのカード・列・メンバーを、読み込んだ内容で置き換えます。よろしいですか？")) return;
         data = normalizeData(imported);
+        if(boxUserName && !data.members.includes(boxUserName)) data.members.push(boxUserName);
+        if(boxUserName) data.currentUser = boxUserName;
         save();
         renderUserSelect();
         renderBoard();
@@ -1267,8 +1387,47 @@
     importFile.value = "";
   });
 
+  // ログアウト
+  document.getElementById("logoutBtn").addEventListener("click", ()=>{
+    if(confirm("ログアウトしますか？")) { clearAuth(); location.reload(); }
+  });
+
   // ---------------- 初期化 ----------------
-  function init(){
+  async function init(){
+    showLoading("Box にログイン中...");
+
+    // OAuthコールバック処理
+    const params = new URLSearchParams(location.search);
+    const code = params.get("code");
+    if(code){
+      try{ storeTokens(await exchangeCode(code)); history.replaceState({}, "", location.pathname); }
+      catch(e){ showError("認証エラー: " + e.message); return; }
+    }
+
+    // トークン確認
+    if(!getAccessToken()){
+      await redirectToBoxLogin(); return;
+    }
+    if(isTokenExpired()){
+      if(!await tryRefreshToken()){ clearAuth(); await redirectToBoxLogin(); return; }
+    }
+
+    // ユーザー情報取得
+    showLoading("ユーザー情報を取得中...");
+    const ur = await boxFetch("https://api.box.com/2.0/users/me");
+    if(!ur) return;
+    const userInfo = await ur.json();
+    boxUserName = userInfo.name;
+
+    // データ読み込み
+    showLoading("データを読み込み中...");
+    data = await loadFromBox();
+
+    // Box ユーザーをメンバーに追加し currentUser に固定
+    if(!data.members.includes(boxUserName)) data.members.push(boxUserName);
+    data.currentUser = boxUserName;
+
+    hideLoading();
     renderUserSelect();
     renderBoard();
   }

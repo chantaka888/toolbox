@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-07-23 — Box API 連携・OAuth 2.0 認証を実装
+
+- `kanban-board/index.html`: Box OAuth 2.0 PKCE フローを実装（ログイン・トークン交換・自動リフレッシュ）
+- `kanban-board/index.html`: `load()`/`save()` を Box API (ファイル読み書き) に置き換え
+- `kanban-board/index.html`: `kanban_data.json` を index.html と同フォルダに自動生成・共有データとして使用
+- `kanban-board/index.html`: ログイン中の Box ユーザー名を「自分」に自動セット・変更不可に固定
+- `kanban-board/index.html`: ローディング画面・エラー表示・ログアウトボタンを追加
+- `kanban-board/index.html`: localStorage のボードデータ管理を廃止（Box に移行）
+
 ## 2026-07-23 — パスワードロック画面を削除
 
 - `kanban-board/index.html`: ロック画面 HTML・CSS・JS を全削除（Box OAuth 認証に移行予定のため）
