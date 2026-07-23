@@ -5,6 +5,13 @@
 
 ---
 
+## 2026-07-23 — パスワードロック画面を削除
+
+- `kanban-board/index.html`: ロック画面 HTML・CSS・JS を全削除（Box OAuth 認証に移行予定のため）
+- `kanban-board/index.html`: `sha256Hex()`・`SESSION_UNLOCK_KEY`・`passwordHash` フィールドを削除
+- `kanban-board/index.html`: 設定モーダルのパスワード変更欄を削除
+- `kanban-board/index.html`: 起動時に `init()` を直接呼び出すよう変更
+
 ## 2026-07-22 — スプリントへの期間設定機能を追加
 
 - `kanban-board/index.html`: スプリント（phase）データに `startDate` / `endDate` フィールドを追加

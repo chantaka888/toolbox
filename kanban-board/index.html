@@ -25,19 +25,6 @@
   button{font-family:inherit;cursor:pointer;}
   input,textarea,select{font-family:inherit;}
 
-  /* ---------- ロック画面 ---------- */
-  #lockScreen{
-    position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000;
-  }
-  #lockScreen.hidden{display:none;}
-  .lockBox{background:var(--panel);padding:32px 28px;border-radius:12px;box-shadow:var(--shadow);width:320px;max-width:90vw;}
-  .lockBox h1{font-size:18px;margin:0 0 4px;}
-  .lockBox p{font-size:13px;color:var(--muted);margin:0 0 16px;}
-  .lockBox input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px;}
-  .lockBox button.primary{width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;}
-  .lockBox .err{color:var(--danger);font-size:12px;min-height:16px;margin-bottom:4px;}
-  .lockBox .hint{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5;}
-
   /* ---------- ヘッダー ---------- */
   header{
     background:var(--panel);border-bottom:1px solid var(--border);
@@ -233,19 +220,6 @@
 </head>
 <body>
 
-<!-- ロック画面 -->
-<div id="lockScreen">
-  <div class="lockBox">
-    <h1 id="lockTitle">パスワードを入力</h1>
-    <p id="lockDesc">このデバイスでボードを開くための合言葉です。</p>
-    <div class="err" id="lockErr"></div>
-    <input type="password" id="lockPass" placeholder="パスワード">
-    <input type="password" id="lockPass2" placeholder="パスワード(確認)" style="display:none;">
-    <button class="primary" id="lockSubmit">開く</button>
-    <div class="hint">※このロックはブラウザ内だけの簡易的なものです。データ自体はこの端末のブラウザに保存され、メンバー間で共有するには「書き出し/読み込み」機能でJSONファイルをやり取りしてください。</div>
-  </div>
-</div>
-
 <header>
   <h1>📋 局タスク管理ボード</h1>
   <div class="spacer"></div>
@@ -373,13 +347,6 @@
         <input type="number" id="alertDaysInput" min="0" max="30" style="width:100px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;">
         <span style="font-size:12px;color:var(--muted);"> 日以内を「まもなく期限」として警告表示します</span>
       </div>
-      <div class="field">
-        <label>ロック用パスワードの変更</label>
-        <div class="addRow">
-          <input type="password" id="newPassInput" placeholder="新しいパスワード">
-          <button id="changePassBtn">変更</button>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -389,7 +356,6 @@
   "use strict";
 
   const STORAGE_KEY = "kanban_bureau_data_v1";
-  const SESSION_UNLOCK_KEY = "kanban_bureau_unlocked_v1";
 
   const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
 
@@ -398,17 +364,11 @@
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
-  async function sha256Hex(str){
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
-  }
-
   function defaultData(){
     const phase1 = {id: uid(), name: "スプリント1", archived:false, startDate:"", endDate:"", createdAt: Date.now()};
     const lane1 = {id: uid(), name: "全般"};
     return {
       version: 2,
-      passwordHash: null,
       alertDays: 2,
       members: ["局長","部下A","部下B"],
       memberColors: {},
@@ -470,67 +430,6 @@
   function save(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }
-
-  // ---------------- ロック画面 ----------------
-  const lockScreen = document.getElementById("lockScreen");
-  const lockTitle = document.getElementById("lockTitle");
-  const lockDesc = document.getElementById("lockDesc");
-  const lockErr = document.getElementById("lockErr");
-  const lockPass = document.getElementById("lockPass");
-  const lockPass2 = document.getElementById("lockPass2");
-  const lockSubmit = document.getElementById("lockSubmit");
-
-  function isFirstRun(){
-    return !data.passwordHash;
-  }
-
-  function showLock(){
-    lockErr.textContent = "";
-    if(isFirstRun()){
-      lockTitle.textContent = "パスワードを設定";
-      lockDesc.textContent = "この端末でボードを開くための合言葉を決めてください。";
-      lockPass2.style.display = "block";
-      lockPass.placeholder = "新しいパスワード";
-    }else{
-      lockTitle.textContent = "パスワードを入力";
-      lockDesc.textContent = "このデバイスでボードを開くための合言葉です。";
-      lockPass2.style.display = "none";
-      lockPass.placeholder = "パスワード";
-    }
-    lockPass.value = "";
-    lockPass2.value = "";
-    lockScreen.classList.remove("hidden");
-    setTimeout(()=>lockPass.focus(), 50);
-  }
-
-  async function handleLockSubmit(){
-    const pass = lockPass.value;
-    if(isFirstRun()){
-      if(pass.length < 4){ lockErr.textContent = "4文字以上で設定してください"; return; }
-      if(pass !== lockPass2.value){ lockErr.textContent = "確認用パスワードが一致しません"; return; }
-      data.passwordHash = await sha256Hex(pass);
-      save();
-      unlock();
-    }else{
-      const hash = await sha256Hex(pass);
-      if(hash === data.passwordHash){
-        unlock();
-      }else{
-        lockErr.textContent = "パスワードが違います";
-      }
-    }
-  }
-
-  function unlock(){
-    sessionStorage.setItem(SESSION_UNLOCK_KEY, "1");
-    lockScreen.classList.add("hidden");
-    init();
-  }
-
-  lockSubmit.addEventListener("click", handleLockSubmit);
-  [lockPass, lockPass2].forEach(el=>{
-    el.addEventListener("keydown", e=>{ if(e.key==="Enter") handleLockSubmit(); });
-  });
 
   // ---------------- 共通ユーティリティ ----------------
   function todayStr(){
@@ -1200,7 +1099,6 @@
   const memberListEl = document.getElementById("memberList");
   const memberNewInput = document.getElementById("memberNewInput");
   const alertDaysInput = document.getElementById("alertDaysInput");
-  const newPassInput = document.getElementById("newPassInput");
 
   function renderMemberList(){
     memberListEl.innerHTML = "";
@@ -1318,15 +1216,6 @@
     renderBoard();
   });
 
-  document.getElementById("changePassBtn").addEventListener("click", async ()=>{
-    const pass = newPassInput.value;
-    if(pass.length < 4){ alert("4文字以上で入力してください"); return; }
-    data.passwordHash = await sha256Hex(pass);
-    save();
-    newPassInput.value = "";
-    alert("パスワードを変更しました");
-  });
-
   document.getElementById("settingsBtn").addEventListener("click", ()=>{
     renderMemberList();
     renderPhaseSettingsList();
@@ -1342,8 +1231,7 @@
 
   // ---------------- 書き出し / 読み込み ----------------
   document.getElementById("exportBtn").addEventListener("click", ()=>{
-    const exportData = Object.assign({}, data, {passwordHash: undefined});
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {type:"application/json"});
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1365,9 +1253,8 @@
           alert("読み込めない形式のファイルです");
           return;
         }
-        if(!confirm("現在のボードのカード・列・メンバーを、読み込んだ内容で置き換えます。よろしいですか？\n(パスワード設定は維持されます)")) return;
-        const keepHash = data.passwordHash;
-        data = normalizeData(Object.assign({}, imported, {passwordHash: keepHash}));
+        if(!confirm("現在のボードのカード・列・メンバーを、読み込んだ内容で置き換えます。よろしいですか？")) return;
+        data = normalizeData(imported);
         save();
         renderUserSelect();
         renderBoard();
@@ -1386,11 +1273,7 @@
     renderBoard();
   }
 
-  if(sessionStorage.getItem(SESSION_UNLOCK_KEY) === "1" && data.passwordHash){
-    init();
-  }else{
-    showLock();
-  }
+  init();
 })();
 </script>
 </body>
