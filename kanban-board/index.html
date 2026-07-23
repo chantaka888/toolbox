@@ -377,9 +377,7 @@
   const INDEX_FILE_ID    = "2363311804189";
   const DATA_FILENAME    = "kanban_data.json";
   const BOX_TOKEN_KEY    = "kanban_box_token";
-  const BOX_REFRESH_KEY  = "kanban_box_refresh";
   const BOX_EXP_KEY      = "kanban_box_exp";
-  const BOX_CV_KEY       = "kanban_box_cv";
   const BOX_DATA_FID_KEY = "kanban_box_dfid";
 
   const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
@@ -453,55 +451,26 @@
   function showError(msg){ loadingMsg.textContent = msg; loginRetryBtn.style.display="inline-flex"; loadingScreen.classList.remove("hidden"); }
   loginRetryBtn.addEventListener("click", ()=>{ clearAuth(); redirectToBoxLogin(); });
 
-  // ---------------- Box 認証 ----------------
+  // ---------------- Box 認証（Implicit フロー） ----------------
   function getAccessToken(){ return localStorage.getItem(BOX_TOKEN_KEY); }
   function isTokenExpired(){ return Date.now() > parseInt(localStorage.getItem(BOX_EXP_KEY)||"0") - 60000; }
-  function storeTokens(t){
-    localStorage.setItem(BOX_TOKEN_KEY, t.access_token);
-    localStorage.setItem(BOX_REFRESH_KEY, t.refresh_token);
-    localStorage.setItem(BOX_EXP_KEY, String(Date.now() + t.expires_in * 1000));
+  function storeTokens(accessToken, expiresIn){
+    localStorage.setItem(BOX_TOKEN_KEY, accessToken);
+    localStorage.setItem(BOX_EXP_KEY, String(Date.now() + expiresIn * 1000));
   }
   function clearAuth(){
-    [BOX_TOKEN_KEY, BOX_REFRESH_KEY, BOX_EXP_KEY, BOX_CV_KEY, BOX_DATA_FID_KEY].forEach(k=>localStorage.removeItem(k));
+    [BOX_TOKEN_KEY, BOX_EXP_KEY, BOX_DATA_FID_KEY,
+     "kanban_box_refresh","kanban_box_cv"].forEach(k=>localStorage.removeItem(k));
   }
-
-  function generateCodeVerifier(){
-    const a = new Uint8Array(32); crypto.getRandomValues(a);
-    return btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
-  }
-  async function generateCodeChallenge(v){
-    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
-    return btoa(String.fromCharCode(...new Uint8Array(h))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
-  }
-  async function redirectToBoxLogin(){
-    const v = generateCodeVerifier();
-    localStorage.setItem(BOX_CV_KEY, v);
-    const ch = await generateCodeChallenge(v);
+  function redirectToBoxLogin(){
+    // Implicit フロー: トークン交換なし、#access_token= でハッシュに返ってくる
     location.href = "https://account.box.com/api/oauth2/authorize?" + new URLSearchParams({
-      response_type:"code", client_id:BOX_CLIENT_ID, redirect_uri:BOX_REDIRECT_URI,
-      code_challenge:ch, code_challenge_method:"S256"
+      response_type:"token", client_id:BOX_CLIENT_ID, redirect_uri:BOX_REDIRECT_URI
     });
-  }
-  async function exchangeCode(code){
-    const r = await fetch("https://api.box.com/oauth2/token", {
-      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
-      body: new URLSearchParams({ grant_type:"authorization_code", code, client_id:BOX_CLIENT_ID,
-        code_verifier: localStorage.getItem(BOX_CV_KEY)||"", redirect_uri:BOX_REDIRECT_URI })
-    });
-    if(!r.ok) throw new Error("トークン取得に失敗しました ("+r.status+")");
-    return r.json();
   }
   async function tryRefreshToken(){
-    const rt = localStorage.getItem(BOX_REFRESH_KEY);
-    if(!rt) return false;
-    try{
-      const r = await fetch("https://api.box.com/oauth2/token", {
-        method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
-        body: new URLSearchParams({ grant_type:"refresh_token", refresh_token:rt, client_id:BOX_CLIENT_ID })
-      });
-      if(!r.ok) return false;
-      storeTokens(await r.json()); return true;
-    }catch(e){ return false; }
+    // Implicit フローにリフレッシュトークンはない → 再ログイン
+    clearAuth(); redirectToBoxLogin(); return false;
   }
   async function boxFetch(url, opts={}){
     if(isTokenExpired()){ if(!await tryRefreshToken()){ clearAuth(); redirectToBoxLogin(); return null; } }
@@ -1396,20 +1365,20 @@
   async function init(){
     showLoading("Box にログイン中...");
 
-    // OAuthコールバック処理
-    const params = new URLSearchParams(location.search);
-    const code = params.get("code");
-    if(code){
-      try{ storeTokens(await exchangeCode(code)); history.replaceState({}, "", location.pathname); }
-      catch(e){ showError("認証エラー: " + e.message); return; }
+    // OAuthコールバック処理（Implicit フロー: #access_token= をハッシュから取得）
+    const hash = new URLSearchParams(location.hash.slice(1));
+    const accessToken = hash.get("access_token");
+    if(accessToken){
+      storeTokens(accessToken, parseInt(hash.get("expires_in")||"3600"));
+      history.replaceState({}, "", location.pathname);
     }
 
     // トークン確認
     if(!getAccessToken()){
-      await redirectToBoxLogin(); return;
+      redirectToBoxLogin(); return;
     }
     if(isTokenExpired()){
-      if(!await tryRefreshToken()){ clearAuth(); await redirectToBoxLogin(); return; }
+      clearAuth(); redirectToBoxLogin(); return;
     }
 
     // ユーザー情報取得

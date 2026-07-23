@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-07-23 — Box OAuth を Implicit フローに切り替え（502 エラー対応）
+
+- `kanban-board/index.html`: PKCE 認可コードフローを廃止し Implicit フロー（response_type=token）に変更
+- `kanban-board/index.html`: `generateCodeVerifier`・`generateCodeChallenge`・`exchangeCode` を削除
+- `kanban-board/index.html`: `storeTokens()` を access_token・expires_in 直接受け取る形に変更
+- `kanban-board/index.html`: `init()` で `location.hash` から `#access_token=` を読み取るよう変更
+- `kanban-board/index.html`: `tryRefreshToken()` を再ログインリダイレクトに変更（リフレッシュトークン廃止）
+- `kanban-board/index.html`: `BOX_REFRESH_KEY`・`BOX_CV_KEY` 定数を削除
+
 ## 2026-07-23 — Box API 連携・OAuth 2.0 認証を実装
 
 - `kanban-board/index.html`: Box OAuth 2.0 PKCE フローを実装（ログイン・トークン交換・自動リフレッシュ）
